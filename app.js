@@ -305,6 +305,55 @@ let state = {
   playTimer: null,
 };
 
+// ── Undo / Redo ──
+
+const undoStack = [], redoStack = [];
+const MAX_UNDO = 80;
+
+function stateSnapshot() {
+  return {
+    cfNotes: state.cfNotes.map(n => n ? {...n} : null),
+    cpNotes: state.cpNotes.map(n => n ? {...n} : null),
+    mode: state.mode, clef: state.clef, cpAbove: state.cpAbove,
+    activeVoice: state.activeVoice, cursor: state.cursor,
+  };
+}
+
+function restoreSnapshot(snap) {
+  state.cfNotes = snap.cfNotes;
+  state.cpNotes = snap.cpNotes;
+  state.mode = snap.mode;
+  state.clef = snap.clef;
+  state.cpAbove = snap.cpAbove;
+  state.activeVoice = snap.activeVoice;
+  state.cursor = snap.cursor;
+  // Sync selects
+  document.getElementById('modeSelect').value = state.mode;
+  document.getElementById('clefSelect').value = state.clef;
+  document.getElementById('btnAbove').className = 'btn' + (state.cpAbove ? ' act' : '');
+  document.getElementById('btnBelow').className = 'btn' + (!state.cpAbove ? ' act' : '');
+}
+
+function pushUndo() {
+  undoStack.push(stateSnapshot());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(stateSnapshot());
+  restoreSnapshot(undoStack.pop());
+  render();
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(stateSnapshot());
+  restoreSnapshot(redoStack.pop());
+  render();
+}
+
 function initState(cfKey) {
   const cf = SAMPLE_CF[cfKey];
   state.mode = cf.mode;
@@ -576,6 +625,7 @@ function renderKeyboard() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function addNote(name, octave) {
+  pushUndo();
   initAudio();
   const midi = toMidi(name, octave);
   playNote(midi, 0.4);
@@ -603,11 +653,21 @@ function addNote(name, octave) {
 }
 
 function clearNote() {
+  pushUndo();
   if (state.activeVoice === "cf" && state.cursor < state.cfNotes.length) {
     state.cfNotes[state.cursor] = null;
   } else if (state.cursor < state.cpNotes.length) {
     state.cpNotes[state.cursor] = null;
   }
+  render();
+}
+
+function clearCP() {
+  if (state.cpNotes.every(n => n === null)) return;
+  pushUndo();
+  state.cpNotes = new Array(state.cfNotes.length).fill(null);
+  state.activeVoice = "cp";
+  state.cursor = 0;
   render();
 }
 
@@ -617,6 +677,7 @@ function moveCursor(dir) {
 }
 
 function addBar() {
+  pushUndo();
   state.cfNotes.push(null);
   state.cpNotes.push(null);
   render();
@@ -624,6 +685,7 @@ function addBar() {
 
 function removeBar() {
   if (state.cfNotes.length <= 1) return;
+  pushUndo();
   state.cfNotes.pop();
   state.cpNotes.pop();
   state.cursor = Math.min(state.cursor, state.cfNotes.length - 1);
@@ -636,6 +698,7 @@ function setActiveVoice(v) {
 }
 
 function setCpAbove(v) {
+  pushUndo();
   state.cpAbove = v;
   document.getElementById('btnAbove').className = 'btn' + (v ? ' act' : '');
   document.getElementById('btnBelow').className = 'btn' + (!v ? ' act' : '');
@@ -991,6 +1054,8 @@ function init() {
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || e.key === 'y')) { e.preventDefault(); redo(); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); moveCursor(1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); moveCursor(-1); }
     if (e.key === 'Delete' || e.key === 'Backspace') {

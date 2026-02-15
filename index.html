@@ -18,7 +18,7 @@ body {
 
 /* Header */
 .header { text-align: center; border-bottom: 1px solid #222; padding-bottom: 12px; margin-bottom: 14px; }
-.header h1 { font-family: ‘EB Garamond’, Georgia, serif; font-size: 28px; font-weight: 600; color: #c8bb98; letter-spacing: 0.5px; }
+.header h1 { font-family: 'EB Garamond', Georgia, serif; font-size: 28px; font-weight: 600; color: #c8bb98; letter-spacing: 0.5px; }
 .header p { color: #555; font-size: 11px; margin-top: 3px; }
 
 /* Panels */
@@ -142,25 +142,25 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
     <div class="ctrl-group">
       <label>CP Position</label>
       <div style="display:flex;gap:3px">
-        <button class="btn act" id="btnAbove" onclick="setCpAbove(true)">Above</button>
-        <button class="btn" id="btnBelow" onclick="setCpAbove(false)">Below</button>
+        <button class="btn act" id="btnAbove">Above</button>
+        <button class="btn" id="btnBelow">Below</button>
       </div>
     </div>
     <div style="display:flex;gap:3px">
-      <button class="btn" onclick="addBar()" aria-label="Add bar">+ Bar</button>
-      <button class="btn" onclick="removeBar()" aria-label="Remove bar">− Bar</button>
+      <button class="btn" id="btnAddBar" aria-label="Add bar">+ Bar</button>
+      <button class="btn" id="btnRemoveBar" aria-label="Remove bar">− Bar</button>
     </div>
     <div style="display:flex;gap:3px;margin-left:auto">
-      <button class="btn play" id="btnPlayBoth" onclick="playAll()">▶ Both</button>
-      <button class="btn play" onclick="playSingle('cf')">▶ CF</button>
-      <button class="btn play" onclick="playSingle('cp')">▶ CP</button>
+      <button class="btn play" id="btnPlayBoth">▶ Both</button>
+      <button class="btn play" id="btnPlayCF">▶ CF</button>
+      <button class="btn play" id="btnPlayCP">▶ CP</button>
     </div>
-    <button class="btn" id="btnRules" onclick="toggleRules()">Rules</button>
+    <button class="btn" id="btnRules">Rules</button>
     <div style="display:flex;gap:3px">
-      <button class="btn" onclick="exportJSON()" title="Export as JSON (reimportable)">Export JSON</button>
-      <button class="btn" onclick="exportMusicXML()" title="Export as MusicXML">MusicXML</button>
-      <button class="btn" onclick="exportText()" title="Export as plain text">Text</button>
-      <button class="btn" onclick="document.getElementById('importFile').click()" title="Import a JSON file">Import</button>
+      <button class="btn" id="btnExportJSON" title="Export as JSON (reimportable)">Export JSON</button>
+      <button class="btn" id="btnExportXML" title="Export as MusicXML">MusicXML</button>
+      <button class="btn" id="btnExportText" title="Export as plain text">Text</button>
+      <button class="btn" id="btnImport" title="Import a JSON file">Import</button>
       <input type="file" id="importFile" accept=".json" style="display:none">
     </div>
   </div>
@@ -180,8 +180,8 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
 
   <div class="pnl" id="inputPanel">
     <div class="tabs" role="tablist">
-      <div class="tab act-cf" id="tabCF" role="tab" aria-selected="true" tabindex="0" onclick="setActiveVoice('cf')">Cantus Firmus</div>
-      <div class="tab" id="tabCP" role="tab" aria-selected="false" tabindex="0" onclick="setActiveVoice('cp')">Counterpoint</div>
+      <div class="tab act-cf" id="tabCF" role="tab" aria-selected="true" tabindex="0">Cantus Firmus</div>
+      <div class="tab" id="tabCP" role="tab" aria-selected="false" tabindex="0">Counterpoint</div>
       <div style="margin-left:auto;display:flex;align-items:center;padding-right:4px">
         <span id="barInfo" style="font-size:10px;color:#555"></span>
       </div>
@@ -189,13 +189,13 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
     <div class="ctx-info" id="ctxInfo"></div>
     <div id="noteKeyboard"></div>
     <div class="nav-row">
-      <button class="btn" onclick="clearNote()" aria-label="Clear current note">✕ Clear</button>
-      <button class="btn" onclick="clearCP()" aria-label="Clear all counterpoint notes">✕ Clear CP</button>
-      <button class="btn" onclick="moveCursor(-1)">← Prev</button>
-      <button class="btn" onclick="moveCursor(1)">Next →</button>
-      <button class="btn" onclick="undo()" title="Ctrl+Z">↩ Undo</button>
-      <button class="btn" onclick="redo()" title="Ctrl+Shift+Z">↪ Redo</button>
-      <button class="btn act" id="btnWriteCP" onclick="switchToCP()" style="display:none">→ Write CP</button>
+      <button class="btn" id="btnClear" aria-label="Clear current note">✕ Clear</button>
+      <button class="btn" id="btnClearCP" aria-label="Clear all counterpoint notes">✕ Clear CP</button>
+      <button class="btn" id="btnPrev">← Prev</button>
+      <button class="btn" id="btnNext">Next →</button>
+      <button class="btn" id="btnUndo" title="Ctrl+Z">↩ Undo</button>
+      <button class="btn" id="btnRedo" title="Ctrl+Shift+Z">↪ Redo</button>
+      <button class="btn act" id="btnWriteCP" style="display:none">→ Write CP</button>
     </div>
   </div>
 
@@ -206,7 +206,7 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
   <div class="footer">First Species Counterpoint · Fux, Salzer/Schachter &amp; Open Music Theory</div>
 </div>
 
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 
 </body>
 </html>

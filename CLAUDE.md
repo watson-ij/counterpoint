@@ -5,20 +5,31 @@ First-species counterpoint composition tool with real-time rule checking. No bui
 ## Structure
 
 - `index.html` — markup and CSS
-- `app.js` — all application logic (music theory, audio engine, rule checker, UI, rendering)
+- `music.js` — pure music theory module (ES module, no DOM dependencies)
+- `app.js` — UI, audio engine, rendering, state management (imports from `music.js`)
+- `test/music.test.js` — test suite for `music.js` (`node:test`, zero dependencies)
 
 ## Architecture
 
-The app is a single-page vanilla JS application using the Web Audio API for sound synthesis and inline SVG for staff notation. No frameworks or dependencies.
+The app is a single-page vanilla JS application using ES modules, the Web Audio API for sound synthesis, and inline SVG for staff notation. No frameworks or build step.
 
-Key sections in `app.js`:
-- **Music theory** — MIDI conversion, interval calculation, motion type detection
+`music.js` (pure logic, testable in Node):
+- **Constants** — `NOTE_NAMES`, `CHROMATIC_SHARP/FLAT`, `SCALE_PATTERNS`, `KEY_DEFS`, `MODES`, `SAMPLE_CF`
+- **Music theory** — `toMidi`, `semiDist`, `genericInterval`, `intervalInfo`, `motionType`
+- **Key/mode helpers** — `buildDiatonicNames`, `buildModeNotes`, `getRaised7th`, `getKeySigWidth`, `getNoteAccidental`
+- **Rule checker** — `checkMelodicLine`, `checkHarmony`
+- **Note spelling** — `migrateNoteName`
+
+`app.js` (DOM/browser, imports from `music.js`):
 - **Audio engine** — dual-oscillator synth (triangle + sine) with lowpass filter and gain envelope
-- **Rule checker** — melodic line validation (`checkMelodicLine`) and harmony validation (`checkHarmony`) per first-species rules
 - **Staff rendering** — SVG generation for the musical staff, notes, and bar highlights
-- **UI actions** — note input, cursor navigation, playback controls
+- **UI actions** — note input, cursor navigation, playback controls (all via `addEventListener` in `init()`)
 - **Local storage** — auto-save/restore session state via `localStorage` (key: `counterpoint_session`)
 - **Export** — JSON (reimportable), MusicXML, plain text; import from JSON file
+
+## Testing
+
+Run tests with: `node --test test/music.test.js`
 
 ## Audio notes
 

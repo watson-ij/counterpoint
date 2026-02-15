@@ -1,79 +1,12 @@
-// ═══════════════════════════════════════════════════════════════════════════
-// MUSIC THEORY
-// ═══════════════════════════════════════════════════════════════════════════
-
-const NOTE_NAMES = ["C","D","E","F","G","A","B"];
-const CHROMATIC = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-
-function toMidi(name, octave) {
-  const b = CHROMATIC.indexOf(name);
-  return b === -1 ? -1 : (octave + 1) * 12 + b;
-}
-function semiDist(m1, m2) { return Math.abs(m2 - m1); }
-function genericInterval(n1, o1, n2, o2) {
-  return Math.abs((NOTE_NAMES.indexOf(n2[0]) + o2*7) - (NOTE_NAMES.indexOf(n1[0]) + o1*7));
-}
-
-function intervalInfo(midi1, midi2) {
-  const diff = Math.abs(midi2 - midi1), simple = diff % 12;
-  const PERF = [0,7], IMP = [3,4,8,9];
-  const isPerfect = PERF.includes(simple) || diff === 12;
-  const isImperfect = IMP.includes(simple);
-  const isDissonant = !isPerfect && !isImperfect;
-  const nm = {0:"P1",1:"m2",2:"M2",3:"m3",4:"M3",5:"P4",6:"TT",7:"P5",8:"m6",9:"M6",10:"m7",11:"M7"};
-  let name = nm[simple] || "?";
-  if (diff === 12) name = "P8";
-  else if (diff > 12) {
-    if (simple===3||simple===4) name="10"; else if (simple===7) name="P12";
-    else if (simple===8||simple===9) name="13"; else if (simple===0) name="P15";
-    else name = nm[simple];
-  }
-  return { semitones:diff, simple, isPerfect, isImperfect, isDissonant, name };
-}
-
-function motionType(v1a,v1b,v2a,v2b) {
-  const d1=v1b-v1a, d2=v2b-v2a;
-  if (d1===0&&d2===0) return "static";
-  if (d1===0||d2===0) return "oblique";
-  if ((d1>0&&d2<0)||(d1<0&&d2>0)) return "contrary";
-  if (Math.sign(d1)===Math.sign(d2)) {
-    const i1=intervalInfo(Math.min(v1a,v2a),Math.max(v1a,v2a));
-    const i2=intervalInfo(Math.min(v1b,v2b),Math.max(v1b,v2b));
-    if (i1.simple===i2.simple && i1.semitones===i2.semitones) return "parallel";
-  }
-  return "similar";
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MODES & PRESET CF
-// ═══════════════════════════════════════════════════════════════════════════
-
-const MODES = {
-  "C major":     {tonic:"C",notes:["C","D","E","F","G","A","B"],minor:false},
-  "D dorian":    {tonic:"D",notes:["C","D","E","F","G","A","B"],minor:true},
-  "D minor":     {tonic:"D",notes:["C","D","E","F","G","A","A#"],minor:true},
-  "E phrygian":  {tonic:"E",notes:["C","D","E","F","G","A","B"],minor:true},
-  "F major":     {tonic:"F",notes:["C","D","E","F","G","A","A#"],minor:false},
-  "G major":     {tonic:"G",notes:["C","D","E","F#","G","A","B"],minor:false},
-  "G mixolydian":{tonic:"G",notes:["C","D","E","F","G","A","B"],minor:false},
-  "A minor":     {tonic:"A",notes:["C","D","E","F","G","A","B"],minor:true},
-  "A aeolian":   {tonic:"A",notes:["C","D","E","F","G","A","B"],minor:true},
-};
-
-const KEY_FIFTHS = {
-  "C major": 0, "D dorian": 0, "D minor": -1, "E phrygian": 0,
-  "F major": -1, "G major": 1, "G mixolydian": 0, "A minor": 0, "A aeolian": 0,
-};
-
-const SAMPLE_CF = {
-  "Fux C major":     {mode:"C major",notes:[{n:"C",o:4},{n:"D",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4},{n:"E",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4},{n:"C",o:4}]},
-  "Fux D dorian":    {mode:"D dorian",notes:[{n:"D",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4},{n:"G",o:4},{n:"F",o:4},{n:"A",o:4},{n:"G",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4}]},
-  "Fux F major":     {mode:"F major",notes:[{n:"F",o:4},{n:"G",o:4},{n:"A",o:4},{n:"F",o:4},{n:"D",o:4},{n:"E",o:4},{n:"F",o:4},{n:"C",o:5},{n:"A",o:4},{n:"F",o:4},{n:"G",o:4},{n:"F",o:4}]},
-  "Schenker C major":{mode:"C major",notes:[{n:"C",o:4},{n:"D",o:4},{n:"E",o:4},{n:"C",o:4},{n:"A",o:3},{n:"B",o:3},{n:"C",o:4},{n:"E",o:4},{n:"D",o:4},{n:"C",o:4}]},
-  "Custom (empty)":  {mode:"C major",notes:[]},
-};
-
-function cfToNotes(arr) { return arr.map(x => ({name:x.n, octave:x.o})); }
+import {
+  NOTE_NAMES, CHROMATIC_SHARP, CHROMATIC_FLAT, CHROMATIC,
+  SCALE_PATTERNS, SHARP_ORDER, FLAT_ORDER,
+  KEY_DEFS, MODES, SAMPLE_CF,
+  toMidi, semiDist, genericInterval, intervalInfo, motionType,
+  buildDiatonicNames, buildModeNotes, getRaised7th, cfToNotes,
+  checkMelodicLine, checkHarmony,
+  migrateNoteName, getNoteAccidental, getKeySigWidth,
+} from './music.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDIO ENGINE (Web Audio API)
@@ -134,186 +67,6 @@ function playNote(midiNote, duration, delay) {
   } catch (e) {
     console.warn('Audio error:', e);
   }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// RULE CHECKER
-// ═══════════════════════════════════════════════════════════════════════════
-
-function checkMelodicLine(notes, mode, label) {
-  const issues = [];
-  const filled = [], filledIdx = [];
-  for (let i = 0; i < notes.length; i++) {
-    if (notes[i]) { filled.push(notes[i]); filledIdx.push(i); }
-  }
-  if (filled.length === 0) return issues;
-  const mi = MODES[mode];
-
-  // Tonic start/end
-  if (notes[0] && notes[0].name !== mi.tonic)
-    issues.push({sev:"error",bar:0,msg:label+" should begin on "+mi.tonic});
-  const li = filledIdx[filledIdx.length-1];
-  if (li === notes.length-1 && filled[filled.length-1].name !== mi.tonic)
-    issues.push({sev:"error",bar:li,msg:label+" should end on "+mi.tonic});
-
-  // Range & climax
-  const midis = filled.map(n => toMidi(n.name,n.octave));
-  if (midis.length > 1) {
-    const range = Math.max(...midis) - Math.min(...midis);
-    if (range > 16) issues.push({sev:"error",bar:-1,msg:label+" range exceeds 10th"});
-    else if (range > 12) issues.push({sev:"warning",bar:-1,msg:label+" range exceeds octave"});
-    const mx = Math.max(...midis);
-    const peaks = filledIdx.filter((_,j) => midis[j]===mx);
-    if (peaks.length > 1) issues.push({sev:"warning",bar:peaks[1],msg:label+": multiple high points"});
-  }
-
-  // Scale check
-  for (let i = 0; i < notes.length; i++) {
-    if (!notes[i]) continue;
-    if (!mi.notes.includes(notes[i].name)) {
-      const idx = CHROMATIC.indexOf(mi.tonic);
-      const r7 = CHROMATIC[(idx+11)%12];
-      if (!(mi.minor && notes[i].name === r7))
-        issues.push({sev:"warning",bar:i,msg:notes[i].name+" not in "+mode});
-    }
-  }
-
-  // Consecutive melodic
-  let cLeaps=0, lDir=0;
-  for (let j=1; j<filled.length; j++) {
-    if (filledIdx[j] !== filledIdx[j-1]+1) { cLeaps=0; continue; }
-    const m1=toMidi(filled[j-1].name,filled[j-1].octave);
-    const m2=toMidi(filled[j].name,filled[j].octave);
-    const s=semiDist(m1,m2);
-    const gi=genericInterval(filled[j-1].name,filled[j-1].octave,filled[j].name,filled[j].octave);
-    const dir=m2>m1?1:m2<m1?-1:0;
-    const bar=filledIdx[j];
-
-    if (s===0 && label==="CF") issues.push({sev:"error",bar:bar,msg:"Repeated note in CF"});
-    else if (s===0) issues.push({sev:"error",bar:bar,msg:"Repeated note in CP"});
-    if (s===6) issues.push({sev:"error",bar:bar,msg:"Melodic tritone in "+label});
-    if (s>=10 && s<=11) issues.push({sev:"error",bar:bar,msg:"Melodic 7th in "+label});
-    if (s===3 && gi===1) issues.push({sev:"error",bar:bar,msg:"Aug 2nd in "+label});
-    if (s>12) issues.push({sev:"error",bar:bar,msg:"Leap > octave in "+label});
-
-    if (gi>=2) {
-      cLeaps++;
-      if (cLeaps>=3) issues.push({sev:"warning",bar:bar,msg:"3+ consecutive leaps in "+label});
-      if (cLeaps>=2 && dir===lDir && dir!==0)
-        issues.push({sev:"warning",bar:bar,msg:"Consecutive leaps same direction in "+label});
-      lDir=dir;
-    } else { cLeaps=0; lDir=0; }
-  }
-
-  // Approach final by step
-  if (filled.length>=2) {
-    const a=filledIdx.length-1, b=filledIdx.length-2;
-    if (filledIdx[a]===notes.length-1 && filledIdx[b]===notes.length-2) {
-      const gi=genericInterval(filled[b].name,filled[b].octave,filled[a].name,filled[a].octave);
-      if (gi>1) issues.push({sev:"error",bar:notes.length-1,msg:label+": approach final by step"});
-    }
-  }
-  return issues;
-}
-
-function checkHarmony(cf, cp, mode, cpAbove) {
-  const issues = [];
-  const n = cf.length;
-  const cfM = cf.map(x => x ? toMidi(x.name,x.octave) : null);
-  const cpM = cp.map(x => x ? toMidi(x.name,x.octave) : null);
-  let cImp = 0;
-
-  for (let i = 0; i < n; i++) {
-    if (cfM[i]===null || cpM[i]===null) { cImp=0; continue; }
-    const intv = intervalInfo(cfM[i], cpM[i]);
-
-    if (i===0) {
-      if (cpAbove) {
-        if (![0,7].includes(intv.simple) && intv.semitones!==12)
-          issues.push({sev:"error",bar:0,msg:"Begin on P1/P5/P8 (got "+intv.name+")"});
-      } else {
-        if (intv.simple!==0 && intv.semitones!==12)
-          issues.push({sev:"error",bar:0,msg:"CP below: begin on P1/P8 (got "+intv.name+")"});
-      }
-    }
-
-    if (intv.isDissonant)
-      issues.push({sev:"error",bar:i,msg:"Dissonant: "+intv.name});
-    if (intv.semitones===0 && i>0 && i<n-1)
-      issues.push({sev:"error",bar:i,msg:"Unison only at start/end"});
-
-    const isEndpoint = (i === 0 || i === n - 1);
-    if (cpAbove && cpM[i] < cfM[i] && !(isEndpoint && cpM[i] === cfM[i]))
-      issues.push({sev:"error",bar:i,msg:"Voice crossing"});
-    if (!cpAbove && cpM[i] > cfM[i] && !(isEndpoint && cpM[i] === cfM[i]))
-      issues.push({sev:"error",bar:i,msg:"Voice crossing"});
-
-    if (i>0 && cfM[i-1]!==null) {
-      if (cpAbove && cpM[i]<cfM[i-1]) issues.push({sev:"warning",bar:i,msg:"Voice overlap"});
-      if (!cpAbove && cpM[i]>cfM[i-1]) issues.push({sev:"warning",bar:i,msg:"Voice overlap"});
-    }
-
-    if (intv.semitones>19) issues.push({sev:"error",bar:i,msg:"Voices > P12 apart"});
-    else if (intv.semitones>15) issues.push({sev:"warning",bar:i,msg:"Voices > 10th apart"});
-
-    if (intv.isImperfect) { cImp++; if (cImp>3) issues.push({sev:"warning",bar:i,msg:cImp+" consecutive 3rds/6ths"}); }
-    else cImp=0;
-
-    if (i>0 && cfM[i-1]!==null && cpM[i-1]!==null) {
-      const prev = intervalInfo(cfM[i-1],cpM[i-1]);
-      const mot = motionType(cfM[i-1],cfM[i],cpM[i-1],cpM[i]);
-      if (intv.isPerfect && prev.isPerfect && intv.simple===prev.simple && mot==="parallel") {
-        const nm = intv.semitones===0?"unisons":intv.simple===7?"5ths":"octaves";
-        issues.push({sev:"error",bar:i,msg:"Parallel "+nm});
-      }
-      if (mot==="similar" && intv.isPerfect && intv.semitones!==0) {
-        const uMoved = cpAbove ? Math.abs(cpM[i]-cpM[i-1]) : Math.abs(cfM[i]-cfM[i-1]);
-        if (uMoved > 2) {
-          const nm = intv.simple===7?"5ths":"octaves";
-          issues.push({sev:"error",bar:i,msg:"Direct "+nm});
-        }
-      }
-    }
-  }
-
-  // Ending
-  if (cf[n-1] && cp[n-1]) {
-    const li = intervalInfo(cfM[n-1],cpM[n-1]);
-    if (li.simple!==0 && li.semitones!==12)
-      issues.push({sev:"error",bar:n-1,msg:"End on P1/P8 (got "+li.name+")"});
-    if (n>=2 && cf[n-2] && cp[n-2]) {
-      const mot = motionType(cfM[n-2],cfM[n-1],cpM[n-2],cpM[n-1]);
-      if (mot!=="contrary") issues.push({sev:"warning",bar:n-1,msg:"End by contrary motion (clausula vera)"});
-    }
-    // Cadential interval check: penultimate should be M6→P8 or m3→P1
-    if (n >= 2 && cf[n-2] && cp[n-2]) {
-      const penIntv = intervalInfo(cfM[n-2], cpM[n-2]);
-      const finIntv = intervalInfo(cfM[n-1], cpM[n-1]);
-      const penSimple = penIntv.simple;
-      const finSimple = finIntv.simple;
-      if (finSimple === 0 && penSimple !== 3 && penSimple !== 4)
-        issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m3/M3 before unison"});
-      if ((finIntv.semitones === 12 || finSimple === 7) && penSimple !== 8 && penSimple !== 9)
-        issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m6/M6 before octave"});
-    }
-    // Leading tone check in minor modes
-    const mi = MODES[mode];
-    if (mi.minor && n >= 2 && cp[n-2]) {
-      const tonicIdx = CHROMATIC.indexOf(mi.tonic);
-      const leadingTone = CHROMATIC[(tonicIdx + 11) % 12];
-      if (cp[n-2].name !== leadingTone && (!cf[n-2] || cf[n-2].name !== leadingTone))
-        issues.push({sev:"warning",bar:n-2,msg:"Consider raised 7th ("+leadingTone+") at cadence"});
-    }
-  }
-
-  // Climax coincidence
-  const cfF = cfM.filter(m=>m!==null), cpF = cpM.filter(m=>m!==null);
-  if (cfF.length>2 && cpF.length>2) {
-    const cfPeak = cfM.indexOf(Math.max(...cfF));
-    const cpPeak = cpM.indexOf(Math.max(...cpF));
-    if (cfPeak===cpPeak && cfPeak>=0) issues.push({sev:"warning",bar:cfPeak,msg:"CF & CP climaxes coincide"});
-  }
-  return issues;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -425,9 +178,51 @@ function getLedgerLines(name, octave) {
   return lines;
 }
 
+// Key signature vertical positions (octave for each accidental in standard order)
+// These define which octave each sharp/flat appears at in the key signature for each clef
+const KS_SHARP_OCTAVES = {
+  treble: [5,4,5,4,4,4,4],  // F5 C5 G5 D5 A4 E5 B4
+  alto:   [4,4,4,3,4,3,3],  // F4 C4 G4 D4 A3 E4 B3 — adjusted for alto
+  bass:   [4,3,4,3,3,3,3],  // F4 C3 G4 D3 A3 E3 B3 — adjusted for bass
+};
+const KS_FLAT_OCTAVES = {
+  treble: [4,5,4,5,4,4,4],  // B4 E5 A4 D5 G4 C5 F4
+  alto:   [3,4,3,4,3,4,3],  // B3 E4 A3 D4 G3 C4 F3
+  bass:   [3,3,3,3,3,3,2],  // B3 E3 A3 D3 G3 C3 F2
+};
+
+function renderKeySignature(clef, mode) {
+  const mi = MODES[mode];
+  if (!mi || mi.fifths === 0) return '';
+  const count = Math.abs(mi.fifths);
+  let svg = '';
+  const startX = LEFT_MARGIN + CLEF_WIDTH + 2;
+
+  if (mi.fifths > 0) {
+    // Sharps
+    const octs = KS_SHARP_OCTAVES[clef] || KS_SHARP_OCTAVES.treble;
+    for (let i = 0; i < count; i++) {
+      const note = SHARP_ORDER[i];
+      const y = noteToY(note, octs[i]);
+      svg += `<text x="${startX + i * 10}" y="${y + 4}" font-size="14" fill="#666" font-family="serif">♯</text>`;
+    }
+  } else {
+    // Flats
+    const octs = KS_FLAT_OCTAVES[clef] || KS_FLAT_OCTAVES.treble;
+    for (let i = 0; i < count; i++) {
+      const note = FLAT_ORDER[i];
+      const y = noteToY(note, octs[i]);
+      svg += `<text x="${startX + i * 10}" y="${y + 4}" font-size="14" fill="#666" font-family="serif">♭</text>`;
+    }
+  }
+  return svg;
+}
+
 function renderStaff() {
   const totalBars = Math.max(state.cfNotes.length, 6);
-  const svgW = LEFT_MARGIN + CLEF_WIDTH + totalBars * BAR_WIDTH + 30;
+  const keySigW = getKeySigWidth(state.mode);
+  const contentStart = LEFT_MARGIN + CLEF_WIDTH + keySigW;
+  const svgW = contentStart + totalBars * BAR_WIDTH + 30;
   const svgH = STAFF_TOP + 4*STAFF_LINE_GAP + 100;
 
   const nk = getNotesKey();
@@ -449,9 +244,12 @@ function renderStaff() {
   const clefInfo = CLEFS[state.clef] || CLEFS.treble;
   svg += `<text x="${LEFT_MARGIN+4}" y="${STAFF_TOP+clefInfo.dy*STAFF_LINE_GAP}" font-size="${clefInfo.fontSize}" fill="#444" font-family="serif">${clefInfo.symbol}</text>`;
 
+  // Key signature
+  svg += renderKeySignature(state.clef, state.mode);
+
   // Bars
   for (let i=0; i<totalBars; i++) {
-    const x = LEFT_MARGIN+CLEF_WIDTH+i*BAR_WIDTH;
+    const x = contentStart+i*BAR_WIDTH;
     const isCur = i===state.cursor;
     const isErr = errBars.has(i);
     const isWarn = !isErr && warnBars.has(i);
@@ -484,7 +282,7 @@ function renderStaff() {
   // CF notes
   state.cfNotes.forEach((n,i) => {
     if (!n) return;
-    const x = LEFT_MARGIN+CLEF_WIDTH+i*BAR_WIDTH+BAR_WIDTH/2, y = noteToY(n.name, n.octave);
+    const x = contentStart+i*BAR_WIDTH+BAR_WIDTH/2, y = noteToY(n.name, n.octave);
     const ldg = getLedgerLines(n.name, n.octave);
     const isCur = i===state.cursor && state.activeVoice==="cf";
     ldg.forEach(ly => { svg += `<line x1="${x-10}" y1="${ly}" x2="${x+10}" y2="${ly}" stroke="#2a2a3a" stroke-width="1"/>`; });
@@ -492,6 +290,8 @@ function renderStaff() {
     const str = errBars.has(i) ? "#c44" : isCur ? "#e8c060" : "#806830";
     svg += `<g class="note-click" data-bar="${i}" data-voice="cf" style="cursor:pointer">`;
     svg += `<ellipse cx="${x}" cy="${y}" rx="${NOTE_RY+1}" ry="${NOTE_RY-1}" fill="${fill}" stroke="${str}" stroke-width="${isCur?1.5:1}" transform="rotate(-12,${x},${y})"/>`;
+    const cfAcc = getNoteAccidental(n.name, state.mode);
+    if (cfAcc) svg += `<text x="${x-11}" y="${y+4}" font-size="12" fill="#998" font-family="serif">${cfAcc}</text>`;
     const ty = (state.cpAbove || !state.cpNotes[i]) ? y+16 : y-12;
     svg += `<text x="${x}" y="${ty}" text-anchor="middle" font-size="7.5" fill="#665" font-family="'JetBrains Mono',monospace">${n.name}${n.octave}</text>`;
     svg += `</g>`;
@@ -500,7 +300,7 @@ function renderStaff() {
   // CP notes
   state.cpNotes.forEach((n,i) => {
     if (!n) return;
-    const x = LEFT_MARGIN+CLEF_WIDTH+i*BAR_WIDTH+BAR_WIDTH/2, y = noteToY(n.name, n.octave);
+    const x = contentStart+i*BAR_WIDTH+BAR_WIDTH/2, y = noteToY(n.name, n.octave);
     const ldg = getLedgerLines(n.name, n.octave);
     const isCur = i===state.cursor && state.activeVoice==="cp";
     ldg.forEach(ly => { svg += `<line x1="${x-10}" y1="${ly}" x2="${x+10}" y2="${ly}" stroke="#2a2a3a" stroke-width="1"/>`; });
@@ -508,6 +308,8 @@ function renderStaff() {
     const str = errBars.has(i) ? "#c44" : isCur ? "#7abaff" : "#2a5a8a";
     svg += `<g class="note-click" data-bar="${i}" data-voice="cp" style="cursor:pointer">`;
     svg += `<ellipse cx="${x}" cy="${y}" rx="${NOTE_RY+1}" ry="${NOTE_RY-1}" fill="${fill}" stroke="${str}" stroke-width="${isCur?1.5:1}" transform="rotate(-12,${x},${y})"/>`;
+    const cpAcc = getNoteAccidental(n.name, state.mode);
+    if (cpAcc) svg += `<text x="${x-11}" y="${y+4}" font-size="12" fill="#8aa" font-family="serif">${cpAcc}</text>`;
     const ty = state.cpAbove ? y-10 : y+16;
     svg += `<text x="${x}" y="${ty}" text-anchor="middle" font-size="7.5" fill="#568" font-family="'JetBrains Mono',monospace">${n.name}${n.octave}</text>`;
     svg += `</g>`;
@@ -603,18 +405,14 @@ function renderKeyboard() {
     ? (state.cpAbove ? [4,5] : [3,4])
     : [3,4,5];
 
-  let r7 = null;
-  if (mi.minor) {
-    const idx = CHROMATIC.indexOf(mi.tonic);
-    const r = CHROMATIC[(idx+11)%12];
-    if (!mi.notes.includes(r)) r7 = r;
-  }
+  const r7raw = getRaised7th(state.mode);
+  const r7 = (r7raw && !mi.notes.includes(r7raw)) ? r7raw : null;
 
   let html = '';
   octaves.forEach(oct => {
     html += `<div class="oct-row"><span class="oct-label">${oct}</span>`;
     mi.notes.forEach(nm => {
-      const cls = nm.includes('#') ? 'nbtn sharp' : 'nbtn';
+      const cls = nm.length > 1 ? 'nbtn sharp' : 'nbtn';
       html += `<button class="${cls}" data-note="${nm}" data-oct="${oct}">${nm}${oct}</button>`;
     });
     if (r7) {
@@ -776,6 +574,21 @@ function playSingle(voice) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// NOTE RE-SPELLING (uses migrateNoteName from music.js)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Re-spell all notes in state when switching between modes
+function respellNotes(oldMode, newMode) {
+  function respell(notes) {
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i]) notes[i].name = migrateNoteName(notes[i].name, newMode);
+    }
+  }
+  respell(state.cfNotes);
+  respell(state.cpNotes);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // LOCAL STORAGE
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -811,6 +624,8 @@ function loadState() {
     state.cpAbove = data.cpAbove !== false;
     state.activeVoice = data.activeVoice === "cf" ? "cf" : "cp";
     state.cursor = typeof data.cursor === "number" ? Math.min(data.cursor, state.cfNotes.length - 1) : 0;
+    // Re-spell saved notes to match current key convention
+    respellNotes(null, state.mode);
     return true;
   } catch (e) {
     console.warn("Could not load from localStorage:", e);
@@ -850,6 +665,8 @@ function importJSON(file) {
       state.cpAbove = data.cpAbove !== false;
       state.activeVoice = "cp";
       state.cursor = 0;
+      // Re-spell imported notes to match key convention
+      respellNotes(null, state.mode);
       // Sync select elements
       document.getElementById("cfSelect").value = "";
       document.getElementById("modeSelect").value = state.mode;
@@ -904,11 +721,11 @@ function exportMusicXML() {
   function noteToXML(note, voice) {
     if (!note) return `        <note><rest/><duration>4</duration><type>whole</type><voice>${voice}</voice></note>\n`;
     const step = note.name[0];
-    const alter = note.name.includes("#") ? 1 : 0;
+    const alter = note.name.includes("#") ? 1 : note.name.includes("b") ? -1 : 0;
     let xml = `        <note>\n`;
     xml += `          <pitch>\n`;
     xml += `            <step>${step}</step>\n`;
-    if (alter) xml += `            <alter>${alter}</alter>\n`;
+    if (alter !== 0) xml += `            <alter>${alter}</alter>\n`;
     xml += `            <octave>${note.octave}</octave>\n`;
     xml += `          </pitch>\n`;
     xml += `          <duration>4</duration>\n`;
@@ -918,7 +735,7 @@ function exportMusicXML() {
     return xml;
   }
 
-  const fifths = KEY_FIFTHS[state.mode] || 0;
+  const fifths = (MODES[state.mode] && MODES[state.mode].fifths) || 0;
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n`;
@@ -1082,6 +899,43 @@ function init() {
     if (b >= 0) { state.cursor = b; render(); }
   });
 
+  // ── Button bindings (replacing inline onclick handlers) ──
+
+  // Controls row: CP position
+  document.getElementById('btnAbove').addEventListener('click', () => setCpAbove(true));
+  document.getElementById('btnBelow').addEventListener('click', () => setCpAbove(false));
+
+  // Controls row: add/remove bar
+  document.getElementById('btnAddBar').addEventListener('click', () => addBar());
+  document.getElementById('btnRemoveBar').addEventListener('click', () => removeBar());
+
+  // Playback
+  document.getElementById('btnPlayBoth').addEventListener('click', () => playAll());
+  document.getElementById('btnPlayCF').addEventListener('click', () => playSingle('cf'));
+  document.getElementById('btnPlayCP').addEventListener('click', () => playSingle('cp'));
+
+  // Rules toggle
+  document.getElementById('btnRules').addEventListener('click', () => toggleRules());
+
+  // Export / import
+  document.getElementById('btnExportJSON').addEventListener('click', () => exportJSON());
+  document.getElementById('btnExportXML').addEventListener('click', () => exportMusicXML());
+  document.getElementById('btnExportText').addEventListener('click', () => exportText());
+  document.getElementById('btnImport').addEventListener('click', () => document.getElementById('importFile').click());
+
+  // Voice tabs
+  document.getElementById('tabCF').addEventListener('click', () => setActiveVoice('cf'));
+  document.getElementById('tabCP').addEventListener('click', () => setActiveVoice('cp'));
+
+  // Nav row
+  document.getElementById('btnClear').addEventListener('click', () => clearNote());
+  document.getElementById('btnClearCP').addEventListener('click', () => clearCP());
+  document.getElementById('btnPrev').addEventListener('click', () => moveCursor(-1));
+  document.getElementById('btnNext').addEventListener('click', () => moveCursor(1));
+  document.getElementById('btnUndo').addEventListener('click', () => undo());
+  document.getElementById('btnRedo').addEventListener('click', () => redo());
+  document.getElementById('btnWriteCP').addEventListener('click', () => switchToCP());
+
   // Populate selects
   const cfSel = document.getElementById('cfSelect');
   Object.keys(SAMPLE_CF).forEach(k => {
@@ -1092,12 +946,27 @@ function init() {
   cfSel.addEventListener('change', () => { clearSaved(); initState(cfSel.value); render(); });
 
   const modeSel = document.getElementById('modeSelect');
-  Object.keys(MODES).forEach(k => {
-    const opt = document.createElement('option');
-    opt.value = k; opt.textContent = k;
-    modeSel.appendChild(opt);
+  const modeGroups = [
+    ["Major Keys", KEY_DEFS.filter(d => d[3] === "major").map(d => d[0])],
+    ["Minor Keys", KEY_DEFS.filter(d => d[3] === "minor").map(d => d[0])],
+    ["Modes", KEY_DEFS.filter(d => !["major","minor"].includes(d[3])).map(d => d[0])],
+  ];
+  modeGroups.forEach(([label, keys]) => {
+    const grp = document.createElement('optgroup');
+    grp.label = label;
+    keys.forEach(k => {
+      const opt = document.createElement('option');
+      opt.value = k; opt.textContent = k;
+      grp.appendChild(opt);
+    });
+    modeSel.appendChild(grp);
   });
-  modeSel.addEventListener('change', () => { state.mode = modeSel.value; render(); });
+  modeSel.addEventListener('change', () => {
+    const oldMode = state.mode;
+    state.mode = modeSel.value;
+    respellNotes(oldMode, state.mode);
+    render();
+  });
 
   const clefSel = document.getElementById('clefSelect');
   clefSel.addEventListener('change', () => { state.clef = clefSel.value; render(); });

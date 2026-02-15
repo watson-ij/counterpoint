@@ -300,7 +300,7 @@ function checkHarmony(cf, cp, mode, cpAbove) {
     if (mi.minor && n >= 2 && cp[n-2]) {
       const tonicIdx = CHROMATIC.indexOf(mi.tonic);
       const leadingTone = CHROMATIC[(tonicIdx + 11) % 12];
-      if (cp[n-2].name !== leadingTone && cf[n-2] && cf[n-2].name !== leadingTone)
+      if (cp[n-2].name !== leadingTone && (!cf[n-2] || cf[n-2].name !== leadingTone))
         issues.push({sev:"warning",bar:n-2,msg:"Consider raised 7th ("+leadingTone+") at cadence"});
     }
   }

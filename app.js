@@ -130,6 +130,7 @@ function playNote(midiNote, duration, delay) {
     osc2.start(t);
     osc1.stop(t + duration + 0.05);
     osc2.stop(t + duration + 0.05);
+    osc1.onended = () => { osc1.disconnect(); osc2.disconnect(); filter.disconnect(); gainNode.disconnect(); };
   } catch (e) {
     console.warn('Audio error:', e);
   }
@@ -429,7 +430,12 @@ function renderStaff() {
   const svgW = LEFT_MARGIN + CLEF_WIDTH + totalBars * BAR_WIDTH + 30;
   const svgH = STAFF_TOP + 4*STAFF_LINE_GAP + 100;
 
-  const issues = runAnalysis();
+  const nk = getNotesKey();
+  if (nk !== _notesKey || !_cachedIssues) {
+    _cachedIssues = runAnalysis();
+    _notesKey = nk;
+  }
+  const issues = _cachedIssues;
   const errBars = new Set(issues.filter(i => i.sev==="error" && i.bar>=0).map(i => i.bar));
   const warnBars = new Set(issues.filter(i => i.sev==="warning" && i.bar>=0).map(i => i.bar));
 
@@ -977,6 +983,15 @@ function downloadFile(name, content, type) {
 // RENDER
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Render caching: skip expensive work on cursor-only changes
+let _cachedIssues = null;
+let _notesKey = '';
+let _kbKey = '';
+
+function getNotesKey() {
+  return JSON.stringify(state.cfNotes) + '|' + JSON.stringify(state.cpNotes) + '|' + state.mode + '|' + state.cpAbove;
+}
+
 function render() {
   // Tabs
   document.getElementById('tabCF').className = 'tab' + (state.activeVoice==='cf' ? ' act-cf' : '');
@@ -1016,8 +1031,14 @@ function render() {
   const showWriteCP = state.activeVoice === 'cf' && state.cfNotes.filter(Boolean).length >= 5;
   document.getElementById('btnWriteCP').style.display = showWriteCP ? 'inline-flex' : 'none';
 
-  // Keyboard, Staff, Analysis
-  renderKeyboard();
+  // Keyboard — only rebuild when mode/voice/position changes
+  const kk = state.mode + '|' + state.activeVoice + '|' + state.cpAbove;
+  if (kk !== _kbKey) {
+    renderKeyboard();
+    _kbKey = kk;
+  }
+
+  // Staff & Analysis
   const issues = renderStaff();
   renderAnalysis(issues);
 

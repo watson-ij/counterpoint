@@ -296,6 +296,7 @@ let state = {
   cfNotes: [],
   cpNotes: [],
   mode: "C major",
+  clef: "treble",
   cpAbove: true,
   activeVoice: "cp",
   cursor: 0,
@@ -303,6 +304,55 @@ let state = {
   playHead: -1,
   playTimer: null,
 };
+
+// ── Undo / Redo ──
+
+const undoStack = [], redoStack = [];
+const MAX_UNDO = 80;
+
+function stateSnapshot() {
+  return {
+    cfNotes: state.cfNotes.map(n => n ? {...n} : null),
+    cpNotes: state.cpNotes.map(n => n ? {...n} : null),
+    mode: state.mode, clef: state.clef, cpAbove: state.cpAbove,
+    activeVoice: state.activeVoice, cursor: state.cursor,
+  };
+}
+
+function restoreSnapshot(snap) {
+  state.cfNotes = snap.cfNotes;
+  state.cpNotes = snap.cpNotes;
+  state.mode = snap.mode;
+  state.clef = snap.clef;
+  state.cpAbove = snap.cpAbove;
+  state.activeVoice = snap.activeVoice;
+  state.cursor = snap.cursor;
+  // Sync selects
+  document.getElementById('modeSelect').value = state.mode;
+  document.getElementById('clefSelect').value = state.clef;
+  document.getElementById('btnAbove').className = 'btn' + (state.cpAbove ? ' act' : '');
+  document.getElementById('btnBelow').className = 'btn' + (!state.cpAbove ? ' act' : '');
+}
+
+function pushUndo() {
+  undoStack.push(stateSnapshot());
+  if (undoStack.length > MAX_UNDO) undoStack.shift();
+  redoStack.length = 0;
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  redoStack.push(stateSnapshot());
+  restoreSnapshot(undoStack.pop());
+  render();
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  undoStack.push(stateSnapshot());
+  restoreSnapshot(redoStack.pop());
+  render();
+}
 
 function initState(cfKey) {
   const cf = SAMPLE_CF[cfKey];
@@ -323,8 +373,17 @@ function initState(cfKey) {
 
 const SLG = 11, NR = 5.5, BW = 56, LM = 16, CW = 32, ST = 60;
 
+// Clef definitions: reference note sitting on the middle staff line
+// treble: B4, alto: C4, bass: D3
+const CLEFS = {
+  treble: { ref: "B", refOct: 4, symbol: "\uD834\uDD1E", fontSize: 42, dy: 3.35 },
+  alto:   { ref: "C", refOct: 4, symbol: "\uD834\uDD21", fontSize: 34, dy: 2.6 },
+  bass:   { ref: "D", refOct: 3, symbol: "\uD834\uDD22", fontSize: 34, dy: 1.55 },
+};
+
 function noteToY(name, octave) {
-  const refIdx = NOTE_NAMES.indexOf("B") + 4*7;
+  const c = CLEFS[state.clef] || CLEFS.treble;
+  const refIdx = NOTE_NAMES.indexOf(c.ref) + c.refOct * 7;
   const noteIdx = NOTE_NAMES.indexOf(name[0]) + octave*7;
   return ST + 2*SLG - (noteIdx - refIdx) * (SLG/2);
 }
@@ -354,7 +413,8 @@ function renderStaff() {
     svg += `<line x1="${LM}" y1="${ST+i*SLG}" x2="${svgW-16}" y2="${ST+i*SLG}" stroke="#2a2a3a" stroke-width="1"/>`;
   }
   // Clef
-  svg += `<text x="${LM+4}" y="${ST+3.35*SLG}" font-size="42" fill="#444" font-family="serif">𝄞</text>`;
+  const clefInfo = CLEFS[state.clef] || CLEFS.treble;
+  svg += `<text x="${LM+4}" y="${ST+clefInfo.dy*SLG}" font-size="${clefInfo.fontSize}" fill="#444" font-family="serif">${clefInfo.symbol}</text>`;
 
   // Bars
   for (let i=0; i<totalBars; i++) {
@@ -565,6 +625,7 @@ function renderKeyboard() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function addNote(name, octave) {
+  pushUndo();
   initAudio();
   const midi = toMidi(name, octave);
   playNote(midi, 0.4);
@@ -592,11 +653,21 @@ function addNote(name, octave) {
 }
 
 function clearNote() {
+  pushUndo();
   if (state.activeVoice === "cf" && state.cursor < state.cfNotes.length) {
     state.cfNotes[state.cursor] = null;
   } else if (state.cursor < state.cpNotes.length) {
     state.cpNotes[state.cursor] = null;
   }
+  render();
+}
+
+function clearCP() {
+  if (state.cpNotes.every(n => n === null)) return;
+  pushUndo();
+  state.cpNotes = new Array(state.cfNotes.length).fill(null);
+  state.activeVoice = "cp";
+  state.cursor = 0;
   render();
 }
 
@@ -606,6 +677,7 @@ function moveCursor(dir) {
 }
 
 function addBar() {
+  pushUndo();
   state.cfNotes.push(null);
   state.cpNotes.push(null);
   render();
@@ -613,6 +685,7 @@ function addBar() {
 
 function removeBar() {
   if (state.cfNotes.length <= 1) return;
+  pushUndo();
   state.cfNotes.pop();
   state.cpNotes.pop();
   state.cursor = Math.min(state.cursor, state.cfNotes.length - 1);
@@ -625,6 +698,7 @@ function setActiveVoice(v) {
 }
 
 function setCpAbove(v) {
+  pushUndo();
   state.cpAbove = v;
   document.getElementById('btnAbove').className = 'btn' + (v ? ' act' : '');
   document.getElementById('btnBelow').className = 'btn' + (!v ? ' act' : '');
@@ -686,6 +760,215 @@ function playSingle(voice) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// LOCAL STORAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+const STORAGE_KEY = "counterpoint_session";
+
+function saveState() {
+  try {
+    const data = {
+      cfNotes: state.cfNotes,
+      cpNotes: state.cpNotes,
+      mode: state.mode,
+      clef: state.clef,
+      cpAbove: state.cpAbove,
+      activeVoice: state.activeVoice,
+      cursor: state.cursor,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn("Could not save to localStorage:", e);
+  }
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.cfNotes)) return false;
+    state.cfNotes = data.cfNotes;
+    state.cpNotes = data.cpNotes || new Array(data.cfNotes.length).fill(null);
+    state.mode = data.mode && MODES[data.mode] ? data.mode : "C major";
+    state.clef = data.clef && CLEFS[data.clef] ? data.clef : "treble";
+    state.cpAbove = data.cpAbove !== false;
+    state.activeVoice = data.activeVoice === "cf" ? "cf" : "cp";
+    state.cursor = typeof data.cursor === "number" ? Math.min(data.cursor, state.cfNotes.length - 1) : 0;
+    return true;
+  } catch (e) {
+    console.warn("Could not load from localStorage:", e);
+    return false;
+  }
+}
+
+function clearSaved() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* noop */ }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function exportJSON() {
+  const data = {
+    mode: state.mode,
+    clef: state.clef,
+    cpAbove: state.cpAbove,
+    cfNotes: state.cfNotes,
+    cpNotes: state.cpNotes,
+  };
+  downloadFile("counterpoint.json", JSON.stringify(data, null, 2), "application/json");
+}
+
+function importJSON(file) {
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data || !Array.isArray(data.cfNotes)) { alert("Invalid file format."); return; }
+      state.cfNotes = data.cfNotes;
+      state.cpNotes = data.cpNotes || new Array(data.cfNotes.length).fill(null);
+      state.mode = data.mode && MODES[data.mode] ? data.mode : "C major";
+      state.clef = data.clef && CLEFS[data.clef] ? data.clef : "treble";
+      state.cpAbove = data.cpAbove !== false;
+      state.activeVoice = "cp";
+      state.cursor = 0;
+      // Sync select elements
+      document.getElementById("cfSelect").value = "";
+      document.getElementById("modeSelect").value = state.mode;
+      document.getElementById("clefSelect").value = state.clef;
+      render();
+    } catch (err) {
+      alert("Could not parse file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportText() {
+  const mi = MODES[state.mode];
+  let txt = `First Species Counterpoint — ${state.mode}\n`;
+  txt += `CP position: ${state.cpAbove ? "above" : "below"}\n`;
+  txt += `${"—".repeat(40)}\n`;
+  txt += `Bar  CF       CP       Interval\n`;
+  txt += `${"—".repeat(40)}\n`;
+  const n = state.cfNotes.length;
+  for (let i = 0; i < n; i++) {
+    const cf = state.cfNotes[i] ? `${state.cfNotes[i].name}${state.cfNotes[i].octave}` : "—";
+    const cp = state.cpNotes[i] ? `${state.cpNotes[i].name}${state.cpNotes[i].octave}` : "—";
+    let intv = "";
+    if (state.cfNotes[i] && state.cpNotes[i]) {
+      intv = intervalInfo(
+        toMidi(state.cfNotes[i].name, state.cfNotes[i].octave),
+        toMidi(state.cpNotes[i].name, state.cpNotes[i].octave)
+      ).name;
+    }
+    txt += `${String(i + 1).padStart(3)}  ${cf.padEnd(8)} ${cp.padEnd(8)} ${intv}\n`;
+  }
+  const issues = runAnalysis();
+  if (issues.length > 0) {
+    txt += `\n${"—".repeat(40)}\nAnalysis (${issues.length} issue${issues.length !== 1 ? "s" : ""})\n`;
+    issues.forEach(iss => {
+      const loc = iss.bar >= 0 ? `Bar ${iss.bar + 1}` : "General";
+      txt += `  [${iss.sev.toUpperCase()}] ${loc}: ${iss.msg}\n`;
+    });
+  } else if (state.cpNotes.filter(Boolean).length === n && state.cfNotes.every(Boolean)) {
+    txt += `\nAll first species rules satisfied.\n`;
+  }
+  downloadFile("counterpoint.txt", txt, "text/plain");
+}
+
+function exportMusicXML() {
+  const mi = MODES[state.mode];
+  const n = state.cfNotes.length;
+  const xmlClef = { treble: { sign: "G", line: 2 }, alto: { sign: "C", line: 3 }, bass: { sign: "F", line: 4 } };
+  const cl = xmlClef[state.clef] || xmlClef.treble;
+
+  function noteToXML(note, voice) {
+    if (!note) return `        <note><rest/><duration>4</duration><type>whole</type><voice>${voice}</voice></note>\n`;
+    const step = note.name[0];
+    const alter = note.name.includes("#") ? 1 : 0;
+    let xml = `        <note>\n`;
+    xml += `          <pitch>\n`;
+    xml += `            <step>${step}</step>\n`;
+    if (alter) xml += `            <alter>${alter}</alter>\n`;
+    xml += `            <octave>${note.octave}</octave>\n`;
+    xml += `          </pitch>\n`;
+    xml += `          <duration>4</duration>\n`;
+    xml += `          <type>whole</type>\n`;
+    xml += `          <voice>${voice}</voice>\n`;
+    xml += `        </note>\n`;
+    return xml;
+  }
+
+  // Key signature: count sharps/flats from the mode's note set
+  const sharpOrder = ["F#","C#","G#","D#","A#","E#","B#"];
+  const flatOrder = ["Bb","Eb","Ab","Db","Gb","Cb","Fb"];
+  let fifths = 0;
+  mi.notes.forEach(nm => { if (nm.includes("#")) fifths++; });
+  if (mi.notes.includes("A#") && mi.tonic === "F") fifths = -1; // Bb
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+  xml += `<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n`;
+  xml += `<score-partwise version="4.0">\n`;
+  xml += `  <work><work-title>First Species Counterpoint — ${state.mode}</work-title></work>\n`;
+  xml += `  <part-list>\n`;
+  xml += `    <score-part id="P1"><part-name>Counterpoint</part-name></score-part>\n`;
+  xml += `    <score-part id="P2"><part-name>Cantus Firmus</part-name></score-part>\n`;
+  xml += `  </part-list>\n`;
+
+  // CP part
+  xml += `  <part id="P1">\n`;
+  for (let i = 0; i < n; i++) {
+    xml += `    <measure number="${i + 1}">\n`;
+    if (i === 0) {
+      xml += `      <attributes>\n`;
+      xml += `        <divisions>4</divisions>\n`;
+      xml += `        <key><fifths>${fifths}</fifths></key>\n`;
+      xml += `        <time><beats>4</beats><beat-type>4</beat-type></time>\n`;
+      xml += `        <clef><sign>${cl.sign}</sign><line>${cl.line}</line></clef>\n`;
+      xml += `      </attributes>\n`;
+    }
+    xml += noteToXML(state.cpNotes[i], 1);
+    xml += `    </measure>\n`;
+  }
+  xml += `  </part>\n`;
+
+  // CF part
+  xml += `  <part id="P2">\n`;
+  for (let i = 0; i < n; i++) {
+    xml += `    <measure number="${i + 1}">\n`;
+    if (i === 0) {
+      xml += `      <attributes>\n`;
+      xml += `        <divisions>4</divisions>\n`;
+      xml += `        <key><fifths>${fifths}</fifths></key>\n`;
+      xml += `        <time><beats>4</beats><beat-type>4</beat-type></time>\n`;
+      xml += `        <clef><sign>${cl.sign}</sign><line>${cl.line}</line></clef>\n`;
+      xml += `      </attributes>\n`;
+    }
+    xml += noteToXML(state.cfNotes[i], 1);
+    xml += `    </measure>\n`;
+  }
+  xml += `  </part>\n`;
+  xml += `</score-partwise>\n`;
+
+  downloadFile("counterpoint.musicxml", xml, "application/vnd.recordare.musicxml+xml");
+}
+
+function downloadFile(name, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -730,6 +1013,9 @@ function render() {
   renderKeyboard();
   const issues = renderStaff();
   renderAnalysis(issues);
+
+  // Persist to localStorage
+  saveState();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -744,7 +1030,7 @@ function init() {
     opt.value = k; opt.textContent = k;
     cfSel.appendChild(opt);
   });
-  cfSel.addEventListener('change', () => { initState(cfSel.value); render(); });
+  cfSel.addEventListener('change', () => { clearSaved(); initState(cfSel.value); render(); });
 
   const modeSel = document.getElementById('modeSelect');
   Object.keys(MODES).forEach(k => {
@@ -754,8 +1040,22 @@ function init() {
   });
   modeSel.addEventListener('change', () => { state.mode = modeSel.value; render(); });
 
+  const clefSel = document.getElementById('clefSelect');
+  clefSel.addEventListener('change', () => { state.clef = clefSel.value; render(); });
+
+  // Import file input (hidden)
+  const fileInput = document.getElementById('importFile');
+  if (fileInput) {
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files[0]) importJSON(e.target.files[0]);
+      e.target.value = "";
+    });
+  }
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'Z' || e.key === 'y')) { e.preventDefault(); redo(); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); moveCursor(1); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); moveCursor(-1); }
     if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -764,8 +1064,13 @@ function init() {
     if (e.key === 'Tab') { e.preventDefault(); setActiveVoice(state.activeVoice==='cf'?'cp':'cf'); }
   });
 
-  // Init with first CF
-  initState('Fux C major');
+  // Restore saved session, or fall back to default preset
+  if (!loadState()) {
+    initState('Fux C major');
+  }
+  // Sync select elements to current state
+  modeSel.value = state.mode;
+  clefSel.value = state.clef;
   render();
 
   // Init audio on first interaction

@@ -112,7 +112,7 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
 <div id="app">
   <div class="header">
     <h1>Counterpoint Checker</h1>
-    <p>First Species · Click bars to navigate · ← → keys · Tab to switch voice</p>
+    <p>First Species · Click bars to navigate · ← → keys · Tab to switch voice · Ctrl+Z undo</p>
   </div>
 
   <!-- Controls -->
@@ -125,6 +125,14 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
     <div class="ctrl-group">
       <label>Mode</label>
       <select id="modeSelect"></select>
+    </div>
+    <div class="ctrl-group">
+      <label>Clef</label>
+      <select id="clefSelect">
+        <option value="treble">Treble</option>
+        <option value="alto">Alto</option>
+        <option value="bass">Bass</option>
+      </select>
     </div>
     <div class="ctrl-group">
       <label>CP Position</label>
@@ -143,6 +151,13 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
       <button class="btn play" onclick="playSingle('cp')">▶ CP</button>
     </div>
     <button class="btn" id="btnRules" onclick="toggleRules()">Rules</button>
+    <div style="display:flex;gap:3px">
+      <button class="btn" onclick="exportJSON()" title="Export as JSON (reimportable)">Export JSON</button>
+      <button class="btn" onclick="exportMusicXML()" title="Export as MusicXML">MusicXML</button>
+      <button class="btn" onclick="exportText()" title="Export as plain text">Text</button>
+      <button class="btn" onclick="document.getElementById('importFile').click()" title="Import a JSON file">Import</button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
   </div>
 
   <!-- Rules -->
@@ -170,8 +185,11 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
     <div id="noteKeyboard"></div>
     <div class="nav-row">
       <button class="btn" onclick="clearNote()">✕ Clear</button>
+      <button class="btn" onclick="clearCP()">✕ Clear CP</button>
       <button class="btn" onclick="moveCursor(-1)">← Prev</button>
       <button class="btn" onclick="moveCursor(1)">Next →</button>
+      <button class="btn" onclick="undo()" title="Ctrl+Z">↩ Undo</button>
+      <button class="btn" onclick="redo()" title="Ctrl+Shift+Z">↪ Redo</button>
       <button class="btn act" id="btnWriteCP" onclick="switchToCP()" style="display:none">→ Write CP</button>
     </div>
   </div>

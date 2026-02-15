@@ -295,8 +295,10 @@ function playNote(midiNote, duration, delay) {
     filter.frequency.exponentialRampToValueAtTime(Math.max(400, freq * 0.5), t + duration * 0.8);
 
     // Envelope: attack -> sustain -> release
-    gainNode.gain.setValueAtTime(0.001, t);
-    gainNode.gain.linearRampToValueAtTime(0.22, t + 0.012);
+    // Zero the gain immediately to prevent click from default value of 1.0
+    gainNode.gain.value = 0;
+    gainNode.gain.setValueAtTime(0, t);
+    gainNode.gain.linearRampToValueAtTime(0.22, t + 0.015);
     gainNode.gain.linearRampToValueAtTime(0.14, t + duration * 0.2);
     gainNode.gain.linearRampToValueAtTime(0.001, t + duration);
 

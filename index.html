@@ -143,6 +143,13 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
       <button class="btn play" onclick="playSingle('cp')">▶ CP</button>
     </div>
     <button class="btn" id="btnRules" onclick="toggleRules()">Rules</button>
+    <div style="display:flex;gap:3px">
+      <button class="btn" onclick="exportJSON()" title="Export as JSON (reimportable)">Export JSON</button>
+      <button class="btn" onclick="exportMusicXML()" title="Export as MusicXML">MusicXML</button>
+      <button class="btn" onclick="exportText()" title="Export as plain text">Text</button>
+      <button class="btn" onclick="document.getElementById('importFile').click()" title="Import a JSON file">Import</button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
   </div>
 
   <!-- Rules -->

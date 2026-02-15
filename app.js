@@ -404,7 +404,7 @@ const STAFF_LINE_GAP = 11, NOTE_RY = 5.5, BAR_WIDTH = 56, LEFT_MARGIN = 16, CLEF
 // Clef definitions: reference note sitting on the middle staff line
 // treble: B4, alto: C4, bass: D3
 const CLEFS = {
-  treble: { ref: "B", refOct: 4, symbol: "\uD834\uDD1E", fontSize: 42, dy: 3.35 },
+  treble: { ref: "B", refOct: 4, symbol: "\uD834\uDD1E", fontSize: 56, dy: 3.77 },
   alto:   { ref: "C", refOct: 4, symbol: "\uD834\uDD21", fontSize: 59, dy: 4.1 },
   bass:   { ref: "D", refOct: 3, symbol: "\uD834\uDD22", fontSize: 60, dy: 3.5 },
 };

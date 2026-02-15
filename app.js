@@ -15,6 +15,7 @@ import { CLEFS, renderStaffSVG } from './render.js';
 // ═══════════════════════════════════════════════════════════════════════════
 
 let audioCtx = null;
+let currentTone = 'harpsichord';
 
 function initAudio() {
   if (!audioCtx) {
@@ -25,6 +26,146 @@ function initAudio() {
   }
 }
 
+function playNoteSoft(freq, duration, t) {
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+
+  osc1.type = 'triangle';
+  osc1.frequency.value = freq;
+  osc2.type = 'sine';
+  osc2.frequency.value = freq * 1.002;
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(2500, t);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(400, freq * 0.5), t + duration * 0.8);
+
+  gainNode.gain.value = 0;
+  gainNode.gain.setValueAtTime(0, t);
+  gainNode.gain.linearRampToValueAtTime(0.22, t + 0.015);
+  gainNode.gain.linearRampToValueAtTime(0.14, t + duration * 0.2);
+  gainNode.gain.linearRampToValueAtTime(0.001, t + duration);
+
+  osc1.connect(filter);
+  osc2.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  osc1.start(t);
+  osc2.start(t);
+  osc1.stop(t + duration + 0.05);
+  osc2.stop(t + duration + 0.05);
+  osc1.onended = () => { osc1.disconnect(); osc2.disconnect(); filter.disconnect(); gainNode.disconnect(); };
+}
+
+function playNoteHarpsichord(freq, duration, t) {
+  // Bright plucky tone: fast attack, quick decay, rich harmonics
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const osc3 = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+
+  osc1.type = 'sawtooth';
+  osc1.frequency.value = freq;
+  osc2.type = 'square';
+  osc2.frequency.value = freq * 1.001;
+  // Octave partial for brightness
+  osc3.type = 'triangle';
+  osc3.frequency.value = freq * 2;
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(Math.min(6000, freq * 8), t);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(400, freq * 1.2), t + duration * 0.6);
+
+  gainNode.gain.value = 0;
+  gainNode.gain.setValueAtTime(0, t);
+  gainNode.gain.linearRampToValueAtTime(0.18, t + 0.003);  // very fast attack
+  gainNode.gain.exponentialRampToValueAtTime(0.08, t + 0.08); // initial pluck decay
+  gainNode.gain.exponentialRampToValueAtTime(0.04, t + duration * 0.5); // gentle ring
+  gainNode.gain.linearRampToValueAtTime(0.001, t + duration);
+
+  const mix1 = audioCtx.createGain();
+  const mix2 = audioCtx.createGain();
+  const mix3 = audioCtx.createGain();
+  mix1.gain.value = 0.5;
+  mix2.gain.value = 0.3;
+  mix3.gain.value = 0.2;
+
+  osc1.connect(mix1); mix1.connect(filter);
+  osc2.connect(mix2); mix2.connect(filter);
+  osc3.connect(mix3); mix3.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  osc1.start(t);
+  osc2.start(t);
+  osc3.start(t);
+  const stopT = t + duration + 0.05;
+  osc1.stop(stopT);
+  osc2.stop(stopT);
+  osc3.stop(stopT);
+  osc1.onended = () => {
+    osc1.disconnect(); osc2.disconnect(); osc3.disconnect();
+    mix1.disconnect(); mix2.disconnect(); mix3.disconnect();
+    filter.disconnect(); gainNode.disconnect();
+  };
+}
+
+function playNotePiano(freq, duration, t) {
+  // Percussive hammer tone: fast attack, moderate sustain, gentle release
+  const osc1 = audioCtx.createOscillator();
+  const osc2 = audioCtx.createOscillator();
+  const osc3 = audioCtx.createOscillator();
+  const gainNode = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+
+  osc1.type = 'triangle';
+  osc1.frequency.value = freq;
+  osc2.type = 'sine';
+  osc2.frequency.value = freq * 2.001;  // second harmonic
+  osc3.type = 'sine';
+  osc3.frequency.value = freq * 3.002;  // third harmonic
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(Math.min(5000, freq * 6), t);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(500, freq * 1.5), t + duration * 0.5);
+
+  gainNode.gain.value = 0;
+  gainNode.gain.setValueAtTime(0, t);
+  gainNode.gain.linearRampToValueAtTime(0.25, t + 0.005);  // fast hammer attack
+  gainNode.gain.exponentialRampToValueAtTime(0.12, t + 0.06); // initial decay
+  gainNode.gain.linearRampToValueAtTime(0.08, t + duration * 0.6); // sustain
+  gainNode.gain.linearRampToValueAtTime(0.001, t + duration);
+
+  const mix1 = audioCtx.createGain();
+  const mix2 = audioCtx.createGain();
+  const mix3 = audioCtx.createGain();
+  mix1.gain.value = 0.6;
+  mix2.gain.value = 0.25;
+  mix3.gain.value = 0.08;
+
+  osc1.connect(mix1); mix1.connect(filter);
+  osc2.connect(mix2); mix2.connect(filter);
+  osc3.connect(mix3); mix3.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+
+  osc1.start(t);
+  osc2.start(t);
+  osc3.start(t);
+  const stopT = t + duration + 0.05;
+  osc1.stop(stopT);
+  osc2.stop(stopT);
+  osc3.stop(stopT);
+  osc1.onended = () => {
+    osc1.disconnect(); osc2.disconnect(); osc3.disconnect();
+    mix1.disconnect(); mix2.disconnect(); mix3.disconnect();
+    filter.disconnect(); gainNode.disconnect();
+  };
+}
+
 function playNote(midiNote, duration, delay) {
   duration = duration || 0.5;
   delay = delay || 0;
@@ -33,39 +174,9 @@ function playNote(midiNote, duration, delay) {
     const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
     const t = audioCtx.currentTime + delay;
 
-    // Two oscillators for richer tone
-    const osc1 = audioCtx.createOscillator();
-    const osc2 = audioCtx.createOscillator();
-    const gainNode = audioCtx.createGain();
-    const filter = audioCtx.createBiquadFilter();
-
-    osc1.type = 'triangle';
-    osc1.frequency.value = freq;
-    osc2.type = 'sine';
-    osc2.frequency.value = freq * 1.002;
-
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(2500, t);
-    filter.frequency.exponentialRampToValueAtTime(Math.max(400, freq * 0.5), t + duration * 0.8);
-
-    // Envelope: attack -> sustain -> release
-    // Zero the gain immediately to prevent click from default value of 1.0
-    gainNode.gain.value = 0;
-    gainNode.gain.setValueAtTime(0, t);
-    gainNode.gain.linearRampToValueAtTime(0.22, t + 0.015);
-    gainNode.gain.linearRampToValueAtTime(0.14, t + duration * 0.2);
-    gainNode.gain.linearRampToValueAtTime(0.001, t + duration);
-
-    osc1.connect(filter);
-    osc2.connect(filter);
-    filter.connect(gainNode);
-    gainNode.connect(audioCtx.destination);
-
-    osc1.start(t);
-    osc2.start(t);
-    osc1.stop(t + duration + 0.05);
-    osc2.stop(t + duration + 0.05);
-    osc1.onended = () => { osc1.disconnect(); osc2.disconnect(); filter.disconnect(); gainNode.disconnect(); };
+    if (currentTone === 'harpsichord') playNoteHarpsichord(freq, duration, t);
+    else if (currentTone === 'piano') playNotePiano(freq, duration, t);
+    else playNoteSoft(freq, duration, t);
   } catch (e) {
     console.warn('Audio error:', e);
   }
@@ -452,6 +563,7 @@ function saveState() {
       cpAbove: state.cpAbove,
       activeVoice: state.activeVoice,
       cursor: state.cursor,
+      tone: currentTone,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {
@@ -472,6 +584,7 @@ function loadState() {
     state.cpAbove = data.cpAbove !== false;
     state.activeVoice = data.activeVoice === "cf" ? "cf" : "cp";
     state.cursor = typeof data.cursor === "number" ? Math.min(data.cursor, state.cfNotes.length - 1) : 0;
+    currentTone = ['harpsichord', 'piano', 'soft'].includes(data.tone) ? data.tone : 'harpsichord';
     // Re-spell saved notes to match current key convention
     respellNotes(null, state.mode);
     return true;
@@ -819,6 +932,9 @@ function init() {
   const clefSel = document.getElementById('clefSelect');
   clefSel.addEventListener('change', () => { state.clef = clefSel.value; render(); });
 
+  const toneSel = document.getElementById('toneSelect');
+  toneSel.addEventListener('change', () => { currentTone = toneSel.value; saveState(); });
+
   // Import file input (hidden)
   const fileInput = document.getElementById('importFile');
   if (fileInput) {
@@ -863,6 +979,7 @@ function init() {
   // Sync select elements to current state
   modeSel.value = state.mode;
   clefSel.value = state.clef;
+  toneSel.value = currentTone;
   render();
 
   // Init audio on first interaction

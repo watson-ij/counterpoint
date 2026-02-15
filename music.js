@@ -327,7 +327,7 @@ export function checkHarmony(cf, cp, mode, cpAbove) {
       const finIntv = intervalInfo(cfM[n-1], cpM[n-1]);
       const penSimple = penIntv.simple;
       const finSimple = finIntv.simple;
-      if (finSimple === 0 && penSimple !== 3 && penSimple !== 4)
+      if (finSimple === 0 && finIntv.semitones === 0 && penSimple !== 3 && penSimple !== 4)
         issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m3/M3 before unison"});
       if ((finIntv.semitones === 12 || finSimple === 7) && penSimple !== 8 && penSimple !== 9)
         issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m6/M6 before octave"});

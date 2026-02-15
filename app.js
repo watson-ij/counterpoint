@@ -60,6 +60,11 @@ const MODES = {
   "A aeolian":   {tonic:"A",notes:["C","D","E","F","G","A","B"],minor:true},
 };
 
+const KEY_FIFTHS = {
+  "C major": 0, "D dorian": 0, "D minor": -1, "E phrygian": 0,
+  "F major": -1, "G major": 1, "G mixolydian": 0, "A minor": 0, "A aeolian": 0,
+};
+
 const SAMPLE_CF = {
   "Fux C major":     {mode:"C major",notes:[{n:"C",o:4},{n:"D",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4},{n:"E",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4},{n:"C",o:4}]},
   "Fux D dorian":    {mode:"D dorian",notes:[{n:"D",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4},{n:"G",o:4},{n:"F",o:4},{n:"A",o:4},{n:"G",o:4},{n:"F",o:4},{n:"E",o:4},{n:"D",o:4}]},
@@ -184,7 +189,7 @@ function checkMelodicLine(notes, mode, label) {
     const bar=filledIdx[j];
 
     if (s===0 && label==="CF") issues.push({sev:"error",bar:bar,msg:"Repeated note in CF"});
-    else if (s===0) issues.push({sev:"warning",bar:bar,msg:"Repeated note in CP"});
+    else if (s===0) issues.push({sev:"error",bar:bar,msg:"Repeated note in CP"});
     if (s===6) issues.push({sev:"error",bar:bar,msg:"Melodic tritone in "+label});
     if (s>=10 && s<=11) issues.push({sev:"error",bar:bar,msg:"Melodic 7th in "+label});
     if (s===3 && gi===1) issues.push({sev:"error",bar:bar,msg:"Aug 2nd in "+label});
@@ -236,8 +241,11 @@ function checkHarmony(cf, cp, mode, cpAbove) {
     if (intv.semitones===0 && i>0 && i<n-1)
       issues.push({sev:"error",bar:i,msg:"Unison only at start/end"});
 
-    if (cpAbove && cpM[i]<cfM[i]) issues.push({sev:"error",bar:i,msg:"Voice crossing"});
-    if (!cpAbove && cpM[i]>cfM[i]) issues.push({sev:"error",bar:i,msg:"Voice crossing"});
+    const isEndpoint = (i === 0 || i === n - 1);
+    if (cpAbove && cpM[i] < cfM[i] && !(isEndpoint && cpM[i] === cfM[i]))
+      issues.push({sev:"error",bar:i,msg:"Voice crossing"});
+    if (!cpAbove && cpM[i] > cfM[i] && !(isEndpoint && cpM[i] === cfM[i]))
+      issues.push({sev:"error",bar:i,msg:"Voice crossing"});
 
     if (i>0 && cfM[i-1]!==null) {
       if (cpAbove && cpM[i]<cfM[i-1]) issues.push({sev:"warning",bar:i,msg:"Voice overlap"});
@@ -275,6 +283,25 @@ function checkHarmony(cf, cp, mode, cpAbove) {
     if (n>=2 && cf[n-2] && cp[n-2]) {
       const mot = motionType(cfM[n-2],cfM[n-1],cpM[n-2],cpM[n-1]);
       if (mot!=="contrary") issues.push({sev:"warning",bar:n-1,msg:"End by contrary motion (clausula vera)"});
+    }
+    // Cadential interval check: penultimate should be M6→P8 or m3→P1
+    if (n >= 2 && cf[n-2] && cp[n-2]) {
+      const penIntv = intervalInfo(cfM[n-2], cpM[n-2]);
+      const finIntv = intervalInfo(cfM[n-1], cpM[n-1]);
+      const penSimple = penIntv.simple;
+      const finSimple = finIntv.simple;
+      if (finSimple === 0 && penSimple !== 3 && penSimple !== 4)
+        issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m3/M3 before unison"});
+      if ((finIntv.semitones === 12 || finSimple === 7) && penSimple !== 8 && penSimple !== 9)
+        issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m6/M6 before octave"});
+    }
+    // Leading tone check in minor modes
+    const mi = MODES[mode];
+    if (mi.minor && n >= 2 && cp[n-2]) {
+      const tonicIdx = CHROMATIC.indexOf(mi.tonic);
+      const leadingTone = CHROMATIC[(tonicIdx + 11) % 12];
+      if (cp[n-2].name !== leadingTone && (!cf[n-2] || cf[n-2].name !== leadingTone))
+        issues.push({sev:"warning",bar:n-2,msg:"Consider raised 7th ("+leadingTone+") at cadence"});
     }
   }
 
@@ -371,7 +398,7 @@ function initState(cfKey) {
 // STAFF RENDERING (SVG)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SLG = 11, NR = 5.5, BW = 56, LM = 16, CW = 32, ST = 60;
+const STAFF_LINE_GAP = 11, NOTE_RY = 5.5, BAR_WIDTH = 56, LEFT_MARGIN = 16, CLEF_WIDTH = 32, STAFF_TOP = 60;
 
 // Clef definitions: reference note sitting on the middle staff line
 // treble: B4, alto: C4, bass: D3
@@ -385,40 +412,40 @@ function noteToY(name, octave) {
   const c = CLEFS[state.clef] || CLEFS.treble;
   const refIdx = NOTE_NAMES.indexOf(c.ref) + c.refOct * 7;
   const noteIdx = NOTE_NAMES.indexOf(name[0]) + octave*7;
-  return ST + 2*SLG - (noteIdx - refIdx) * (SLG/2);
+  return STAFF_TOP + 2*STAFF_LINE_GAP - (noteIdx - refIdx) * (STAFF_LINE_GAP/2);
 }
 
 function getLedgerLines(name, octave) {
   const y = noteToY(name, octave);
-  const bot = ST + 4*SLG;
+  const bot = STAFF_TOP + 4*STAFF_LINE_GAP;
   const lines = [];
-  if (y > bot + SLG*0.4) for (let ly = bot+SLG; ly <= y+2; ly += SLG) lines.push(ly);
-  if (y < ST - SLG*0.4) for (let ly = ST-SLG; ly >= y-2; ly -= SLG) lines.push(ly);
+  if (y > bot + STAFF_LINE_GAP*0.4) for (let ly = bot+STAFF_LINE_GAP; ly <= y+2; ly += STAFF_LINE_GAP) lines.push(ly);
+  if (y < STAFF_TOP - STAFF_LINE_GAP*0.4) for (let ly = STAFF_TOP-STAFF_LINE_GAP; ly >= y-2; ly -= STAFF_LINE_GAP) lines.push(ly);
   return lines;
 }
 
 function renderStaff() {
   const totalBars = Math.max(state.cfNotes.length, 6);
-  const svgW = LM + CW + totalBars * BW + 30;
-  const svgH = ST + 4*SLG + 100;
+  const svgW = LEFT_MARGIN + CLEF_WIDTH + totalBars * BAR_WIDTH + 30;
+  const svgH = STAFF_TOP + 4*STAFF_LINE_GAP + 100;
 
   const issues = runAnalysis();
   const errBars = new Set(issues.filter(i => i.sev==="error" && i.bar>=0).map(i => i.bar));
   const warnBars = new Set(issues.filter(i => i.sev==="warning" && i.bar>=0).map(i => i.bar));
 
-  let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block">`;
+  let svg = `<svg width="${svgW}" height="${svgH}" viewBox="0 0 ${svgW} ${svgH}" style="display:block" role="img" aria-label="Musical staff with ${state.cfNotes.filter(Boolean).length} CF notes and ${state.cpNotes.filter(Boolean).length} CP notes">`;
 
   // Staff lines
   for (let i=0; i<5; i++) {
-    svg += `<line x1="${LM}" y1="${ST+i*SLG}" x2="${svgW-16}" y2="${ST+i*SLG}" stroke="#2a2a3a" stroke-width="1"/>`;
+    svg += `<line x1="${LEFT_MARGIN}" y1="${STAFF_TOP+i*STAFF_LINE_GAP}" x2="${svgW-16}" y2="${STAFF_TOP+i*STAFF_LINE_GAP}" stroke="#2a2a3a" stroke-width="1"/>`;
   }
   // Clef
   const clefInfo = CLEFS[state.clef] || CLEFS.treble;
-  svg += `<text x="${LM+4}" y="${ST+clefInfo.dy*SLG}" font-size="${clefInfo.fontSize}" fill="#444" font-family="serif">${clefInfo.symbol}</text>`;
+  svg += `<text x="${LEFT_MARGIN+4}" y="${STAFF_TOP+clefInfo.dy*STAFF_LINE_GAP}" font-size="${clefInfo.fontSize}" fill="#444" font-family="serif">${clefInfo.symbol}</text>`;
 
   // Bars
   for (let i=0; i<totalBars; i++) {
-    const x = LM+CW+i*BW;
+    const x = LEFT_MARGIN+CLEF_WIDTH+i*BAR_WIDTH;
     const isCur = i===state.cursor;
     const isErr = errBars.has(i);
     const isWarn = !isErr && warnBars.has(i);
@@ -429,21 +456,21 @@ function renderStaff() {
     const dash = isCur ? "3,2" : "0";
 
     svg += `<g class="bar-click" data-bar="${i}" style="cursor:pointer">`;
-    svg += `<rect x="${x}" y="${ST-24}" width="${BW}" height="${4*SLG+52}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1" stroke-dasharray="${dash}"/>`;
-    svg += `<text x="${x+BW/2}" y="${ST-12}" text-anchor="middle" font-size="9" fill="${isCur?'#6a9eee':'#333'}" font-family="'JetBrains Mono',monospace">${i+1}</text>`;
+    svg += `<rect x="${x}" y="${STAFF_TOP-24}" width="${BAR_WIDTH}" height="${4*STAFF_LINE_GAP+52}" rx="2" fill="${fill}" stroke="${stroke}" stroke-width="1" stroke-dasharray="${dash}"/>`;
+    svg += `<text x="${x+BAR_WIDTH/2}" y="${STAFF_TOP-12}" text-anchor="middle" font-size="9" fill="${isCur?'#6a9eee':'#333'}" font-family="'JetBrains Mono',monospace">${i+1}</text>`;
 
     // Interval label
     if (state.cfNotes[i] && state.cpNotes[i]) {
       const intv = intervalInfo(toMidi(state.cfNotes[i].name,state.cfNotes[i].octave), toMidi(state.cpNotes[i].name,state.cpNotes[i].octave));
       const col = intv.isDissonant ? "#c44" : intv.isPerfect ? "#6a9eee" : "#7a9a6a";
-      svg += `<text x="${x+BW/2}" y="${svgH-10}" text-anchor="middle" font-size="9" font-family="'JetBrains Mono',monospace" font-weight="500" fill="${col}">${intv.name}</text>`;
+      svg += `<text x="${x+BAR_WIDTH/2}" y="${svgH-10}" text-anchor="middle" font-size="9" font-family="'JetBrains Mono',monospace" font-weight="500" fill="${col}">${intv.name}</text>`;
     }
 
     // Empty slot indicator
     if (!state.cfNotes[i] && state.activeVoice==="cf" && isCur)
-      svg += `<text x="${x+BW/2}" y="${ST+2*SLG+3}" text-anchor="middle" font-size="9" fill="#555">?</text>`;
+      svg += `<text x="${x+BAR_WIDTH/2}" y="${STAFF_TOP+2*STAFF_LINE_GAP+3}" text-anchor="middle" font-size="9" fill="#555">?</text>`;
     if (state.cfNotes[i] && !state.cpNotes[i] && state.activeVoice==="cp" && isCur)
-      svg += `<text x="${x+BW/2}" y="${ST+(state.cpAbove?-2:4*SLG+12)}" text-anchor="middle" font-size="9" fill="#555">?</text>`;
+      svg += `<text x="${x+BAR_WIDTH/2}" y="${STAFF_TOP+(state.cpAbove?-2:4*STAFF_LINE_GAP+12)}" text-anchor="middle" font-size="9" fill="#555">?</text>`;
 
     svg += `</g>`;
   }
@@ -451,14 +478,14 @@ function renderStaff() {
   // CF notes
   state.cfNotes.forEach((n,i) => {
     if (!n) return;
-    const x = LM+CW+i*BW+BW/2, y = noteToY(n.name, n.octave);
+    const x = LEFT_MARGIN+CLEF_WIDTH+i*BAR_WIDTH+BAR_WIDTH/2, y = noteToY(n.name, n.octave);
     const ldg = getLedgerLines(n.name, n.octave);
     const isCur = i===state.cursor && state.activeVoice==="cf";
     ldg.forEach(ly => { svg += `<line x1="${x-10}" y1="${ly}" x2="${x+10}" y2="${ly}" stroke="#2a2a3a" stroke-width="1"/>`; });
     const fill = isCur ? "#d4a84a" : "#a08040";
     const str = errBars.has(i) ? "#c44" : isCur ? "#e8c060" : "#806830";
     svg += `<g class="note-click" data-bar="${i}" data-voice="cf" style="cursor:pointer">`;
-    svg += `<ellipse cx="${x}" cy="${y}" rx="${NR+1}" ry="${NR-1}" fill="${fill}" stroke="${str}" stroke-width="${isCur?1.5:1}" transform="rotate(-12,${x},${y})"/>`;
+    svg += `<ellipse cx="${x}" cy="${y}" rx="${NOTE_RY+1}" ry="${NOTE_RY-1}" fill="${fill}" stroke="${str}" stroke-width="${isCur?1.5:1}" transform="rotate(-12,${x},${y})"/>`;
     const ty = (state.cpAbove || !state.cpNotes[i]) ? y+16 : y-12;
     svg += `<text x="${x}" y="${ty}" text-anchor="middle" font-size="7.5" fill="#665" font-family="'JetBrains Mono',monospace">${n.name}${n.octave}</text>`;
     svg += `</g>`;
@@ -467,14 +494,14 @@ function renderStaff() {
   // CP notes
   state.cpNotes.forEach((n,i) => {
     if (!n) return;
-    const x = LM+CW+i*BW+BW/2, y = noteToY(n.name, n.octave);
+    const x = LEFT_MARGIN+CLEF_WIDTH+i*BAR_WIDTH+BAR_WIDTH/2, y = noteToY(n.name, n.octave);
     const ldg = getLedgerLines(n.name, n.octave);
     const isCur = i===state.cursor && state.activeVoice==="cp";
     ldg.forEach(ly => { svg += `<line x1="${x-10}" y1="${ly}" x2="${x+10}" y2="${ly}" stroke="#2a2a3a" stroke-width="1"/>`; });
     const fill = isCur ? "#5a9aee" : "#3a6aaa";
     const str = errBars.has(i) ? "#c44" : isCur ? "#7abaff" : "#2a5a8a";
     svg += `<g class="note-click" data-bar="${i}" data-voice="cp" style="cursor:pointer">`;
-    svg += `<ellipse cx="${x}" cy="${y}" rx="${NR+1}" ry="${NR-1}" fill="${fill}" stroke="${str}" stroke-width="${isCur?1.5:1}" transform="rotate(-12,${x},${y})"/>`;
+    svg += `<ellipse cx="${x}" cy="${y}" rx="${NOTE_RY+1}" ry="${NOTE_RY-1}" fill="${fill}" stroke="${str}" stroke-width="${isCur?1.5:1}" transform="rotate(-12,${x},${y})"/>`;
     const ty = state.cpAbove ? y-10 : y+16;
     svg += `<text x="${x}" y="${ty}" text-anchor="middle" font-size="7.5" fill="#568" font-family="'JetBrains Mono',monospace">${n.name}${n.octave}</text>`;
     svg += `</g>`;
@@ -482,7 +509,7 @@ function renderStaff() {
   });
 
   // Legend
-  svg += `<g transform="translate(${LM},${svgH-24})">`;
+  svg += `<g transform="translate(${LEFT_MARGIN},${svgH-24})">`;
   svg += `<ellipse cx="0" cy="0" rx="4.5" ry="3.5" fill="#a08040"/><text x="8" y="3" font-size="8" fill="#555" font-family="'JetBrains Mono',monospace">CF</text>`;
   svg += `<ellipse cx="30" cy="0" rx="4.5" ry="3.5" fill="#3a6aaa"/><text x="38" y="3" font-size="8" fill="#555" font-family="'JetBrains Mono',monospace">CP</text>`;
   svg += `</g>`;
@@ -491,18 +518,7 @@ function renderStaff() {
 
   document.getElementById('staffWrap').innerHTML = svg;
 
-  // Attach click handlers
-  document.querySelectorAll('.bar-click').forEach(el => {
-    el.addEventListener('click', () => { state.cursor = parseInt(el.dataset.bar); render(); });
-  });
-  document.querySelectorAll('.note-click').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.cursor = parseInt(el.dataset.bar);
-      state.activeVoice = el.dataset.voice;
-      render();
-    });
-  });
+  // Click handlers use event delegation (attached once in init)
 
   return issues;
 }
@@ -672,7 +688,8 @@ function clearCP() {
 }
 
 function moveCursor(dir) {
-  state.cursor = Math.max(0, Math.min(state.cursor + dir, state.cfNotes.length - 1));
+  const maxIdx = Math.max(0, state.cfNotes.length - 1);
+  state.cursor = Math.max(0, Math.min(state.cursor + dir, maxIdx));
   render();
 }
 
@@ -902,12 +919,7 @@ function exportMusicXML() {
     return xml;
   }
 
-  // Key signature: count sharps/flats from the mode's note set
-  const sharpOrder = ["F#","C#","G#","D#","A#","E#","B#"];
-  const flatOrder = ["Bb","Eb","Ab","Db","Gb","Cb","Fb"];
-  let fifths = 0;
-  mi.notes.forEach(nm => { if (nm.includes("#")) fifths++; });
-  if (mi.notes.includes("A#") && mi.tonic === "F") fifths = -1; // Bb
+  const fifths = KEY_FIFTHS[state.mode] || 0;
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n`;
@@ -975,8 +987,10 @@ function downloadFile(name, content, type) {
 function render() {
   // Tabs
   document.getElementById('tabCF').className = 'tab' + (state.activeVoice==='cf' ? ' act-cf' : '');
+  document.getElementById('tabCF').setAttribute('aria-selected', state.activeVoice==='cf');
   const cpCount = state.cpNotes.filter(Boolean).length;
   document.getElementById('tabCP').className = 'tab' + (state.activeVoice==='cp' ? ' act-cp' : '');
+  document.getElementById('tabCP').setAttribute('aria-selected', state.activeVoice==='cp');
   document.getElementById('tabCP').textContent = 'Counterpoint' + (cpCount > 0 ? ` (${cpCount}/${state.cfNotes.length})` : '');
 
   // Bar info
@@ -1023,6 +1037,22 @@ function render() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function init() {
+  // Event delegation for staff clicks
+  document.getElementById('staffWrap').addEventListener('click', (e) => {
+    const noteEl = e.target.closest('.note-click');
+    if (noteEl) {
+      state.cursor = parseInt(noteEl.dataset.bar);
+      state.activeVoice = noteEl.dataset.voice;
+      render();
+      return;
+    }
+    const barEl = e.target.closest('.bar-click');
+    if (barEl) {
+      state.cursor = parseInt(barEl.dataset.bar);
+      render();
+    }
+  });
+
   // Populate selects
   const cfSel = document.getElementById('cfSelect');
   Object.keys(SAMPLE_CF).forEach(k => {
@@ -1062,6 +1092,22 @@ function init() {
       if (document.activeElement.tagName !== 'SELECT') { e.preventDefault(); clearNote(); }
     }
     if (e.key === 'Tab') { e.preventDefault(); setActiveVoice(state.activeVoice==='cf'?'cp':'cf'); }
+    // Note input via letter keys
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      const noteMap = {'c':'C','d':'D','e':'E','f':'F','g':'G','a':'A','b':'B'};
+      const k = noteMap[e.key.toLowerCase()];
+      if (k) {
+        e.preventDefault();
+        const mi = MODES[state.mode];
+        // Find the matching note name in the current mode (may be sharp variant)
+        const noteName = mi.notes.find(n => n[0] === k) || k;
+        const defaultOct = state.activeVoice === 'cp'
+          ? (state.cpAbove ? 4 : 3)
+          : 4;
+        addNote(noteName, defaultOct);
+        return;
+      }
+    }
   });
 
   // Restore saved session, or fall back to default preset

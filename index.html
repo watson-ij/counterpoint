@@ -100,6 +100,11 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
 .analysis-header { font-size: 12px; font-weight: 500; color: #888; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
 .footer { text-align: center; font-size: 9px; color: #333; margin-top: 10px; }
 
+/* Focus indicators */
+.btn:focus-visible, .nbtn:focus-visible, .tab:focus-visible, select:focus-visible {
+  outline: 2px solid #6a9eee; outline-offset: 1px;
+}
+
 @media (max-width: 640px) {
 .rules { columns: 1; }
 .controls { gap: 6px; }
@@ -142,8 +147,8 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
       </div>
     </div>
     <div style="display:flex;gap:3px">
-      <button class="btn" onclick="addBar()">+ Bar</button>
-      <button class="btn" onclick="removeBar()">− Bar</button>
+      <button class="btn" onclick="addBar()" aria-label="Add bar">+ Bar</button>
+      <button class="btn" onclick="removeBar()" aria-label="Remove bar">− Bar</button>
     </div>
     <div style="display:flex;gap:3px;margin-left:auto">
       <button class="btn play" id="btnPlayBoth" onclick="playAll()">▶ Both</button>
@@ -174,9 +179,9 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
   <!-- Input -->
 
   <div class="pnl" id="inputPanel">
-    <div class="tabs">
-      <div class="tab act-cf" id="tabCF" onclick="setActiveVoice('cf')">Cantus Firmus</div>
-      <div class="tab" id="tabCP" onclick="setActiveVoice('cp')">Counterpoint</div>
+    <div class="tabs" role="tablist">
+      <div class="tab act-cf" id="tabCF" role="tab" aria-selected="true" tabindex="0" onclick="setActiveVoice('cf')">Cantus Firmus</div>
+      <div class="tab" id="tabCP" role="tab" aria-selected="false" tabindex="0" onclick="setActiveVoice('cp')">Counterpoint</div>
       <div style="margin-left:auto;display:flex;align-items:center;padding-right:4px">
         <span id="barInfo" style="font-size:10px;color:#555"></span>
       </div>
@@ -184,8 +189,8 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
     <div class="ctx-info" id="ctxInfo"></div>
     <div id="noteKeyboard"></div>
     <div class="nav-row">
-      <button class="btn" onclick="clearNote()">✕ Clear</button>
-      <button class="btn" onclick="clearCP()">✕ Clear CP</button>
+      <button class="btn" onclick="clearNote()" aria-label="Clear current note">✕ Clear</button>
+      <button class="btn" onclick="clearCP()" aria-label="Clear all counterpoint notes">✕ Clear CP</button>
       <button class="btn" onclick="moveCursor(-1)">← Prev</button>
       <button class="btn" onclick="moveCursor(1)">Next →</button>
       <button class="btn" onclick="undo()" title="Ctrl+Z">↩ Undo</button>

@@ -262,10 +262,10 @@ function checkHarmony(cf, cp, mode, cpAbove) {
       const prev = intervalInfo(cfM[i-1],cpM[i-1]);
       const mot = motionType(cfM[i-1],cfM[i],cpM[i-1],cpM[i]);
       if (intv.isPerfect && prev.isPerfect && intv.simple===prev.simple && mot==="parallel") {
-        const nm = intv.simple===0?"unisons":intv.simple===7?"5ths":"octaves";
+        const nm = intv.semitones===0?"unisons":intv.simple===7?"5ths":"octaves";
         issues.push({sev:"error",bar:i,msg:"Parallel "+nm});
       }
-      if (mot==="similar" && intv.isPerfect && intv.simple!==0) {
+      if (mot==="similar" && intv.isPerfect && intv.semitones!==0) {
         const uMoved = cpAbove ? Math.abs(cpM[i]-cpM[i-1]) : Math.abs(cfM[i]-cfM[i-1]);
         if (uMoved > 2) {
           const nm = intv.simple===7?"5ths":"octaves";
@@ -584,14 +584,7 @@ function renderAnalysis(issues) {
   }
 
   document.getElementById('analysisPanel').innerHTML = html;
-
-  // Jump-to-bar handlers
-  document.querySelectorAll('.iss-jump').forEach(el => {
-    el.addEventListener('click', () => {
-      const b = parseInt(el.dataset.bar);
-      if (b >= 0) { state.cursor = b; render(); }
-    });
-  });
+  // Click handlers use event delegation (attached once in init)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -625,15 +618,7 @@ function renderKeyboard() {
   });
 
   document.getElementById('noteKeyboard').innerHTML = html;
-
-  // Attach handlers
-  document.querySelectorAll('#noteKeyboard .nbtn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const nm = btn.dataset.note;
-      const oct = parseInt(btn.dataset.oct);
-      addNote(nm, oct);
-    });
-  });
+  // Click handlers use event delegation (attached once in init)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -734,17 +719,17 @@ function toggleRules() {
 }
 
 // Playback
+function stopPlayback() {
+  if (state.playTimer) clearTimeout(state.playTimer);
+  state.playing = false;
+  state.playHead = -1;
+  document.getElementById('btnPlayBoth').className = 'btn play';
+  document.getElementById('btnPlayBoth').textContent = '▶ Both';
+}
+
 function playAll() {
   initAudio();
-  if (state.playing) {
-    if (state.playTimer) clearTimeout(state.playTimer);
-    state.playing = false;
-    state.playHead = -1;
-    document.getElementById('btnPlayBoth').className = 'btn play';
-    document.getElementById('btnPlayBoth').textContent = '▶ Both';
-    render();
-    return;
-  }
+  if (state.playing) { stopPlayback(); render(); return; }
   state.playing = true;
   document.getElementById('btnPlayBoth').className = 'btn stop';
   document.getElementById('btnPlayBoth').textContent = '■ Stop';
@@ -752,10 +737,7 @@ function playAll() {
   let i = 0;
   function step() {
     if (i >= state.cfNotes.length || !state.playing) {
-      state.playing = false; state.playHead = -1;
-      document.getElementById('btnPlayBoth').className = 'btn play';
-      document.getElementById('btnPlayBoth').textContent = '▶ Both';
-      render(); return;
+      stopPlayback(); render(); return;
     }
     state.playHead = i;
     if (state.cfNotes[i]) playNote(toMidi(state.cfNotes[i].name, state.cfNotes[i].octave), tempo/1000*0.9);
@@ -769,11 +751,22 @@ function playAll() {
 
 function playSingle(voice) {
   initAudio();
+  if (state.playing) { stopPlayback(); render(); return; }
+  state.playing = true;
   const notes = voice === 'cf' ? state.cfNotes : state.cpNotes;
   const tempo = 500;
-  notes.forEach((n, i) => {
-    if (n) playNote(toMidi(n.name, n.octave), tempo/1000*0.9, i*tempo/1000);
-  });
+  let i = 0;
+  function step() {
+    if (i >= notes.length || !state.playing) {
+      stopPlayback(); render(); return;
+    }
+    state.playHead = i;
+    if (notes[i]) playNote(toMidi(notes[i].name, notes[i].octave), tempo/1000*0.9);
+    renderStaff();
+    i++;
+    state.playTimer = setTimeout(step, tempo);
+  }
+  step();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -977,7 +970,7 @@ function downloadFile(name, content, type) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1051,6 +1044,21 @@ function init() {
       state.cursor = parseInt(barEl.dataset.bar);
       render();
     }
+  });
+
+  // Event delegation for keyboard note buttons
+  document.getElementById('noteKeyboard').addEventListener('click', (e) => {
+    const btn = e.target.closest('.nbtn');
+    if (!btn) return;
+    addNote(btn.dataset.note, parseInt(btn.dataset.oct));
+  });
+
+  // Event delegation for analysis issue jump-to-bar
+  document.getElementById('analysisPanel').addEventListener('click', (e) => {
+    const iss = e.target.closest('.iss-jump');
+    if (!iss) return;
+    const b = parseInt(iss.dataset.bar);
+    if (b >= 0) { state.cursor = b; render(); }
   });
 
   // Populate selects

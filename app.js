@@ -296,6 +296,7 @@ let state = {
   cfNotes: [],
   cpNotes: [],
   mode: "C major",
+  clef: "treble",
   cpAbove: true,
   activeVoice: "cp",
   cursor: 0,
@@ -323,8 +324,17 @@ function initState(cfKey) {
 
 const SLG = 11, NR = 5.5, BW = 56, LM = 16, CW = 32, ST = 60;
 
+// Clef definitions: reference note sitting on the middle staff line
+// treble: B4, alto: C4, bass: D3
+const CLEFS = {
+  treble: { ref: "B", refOct: 4, symbol: "\uD834\uDD1E", fontSize: 42, dy: 3.35 },
+  alto:   { ref: "C", refOct: 4, symbol: "\uD834\uDD21", fontSize: 34, dy: 2.6 },
+  bass:   { ref: "D", refOct: 3, symbol: "\uD834\uDD22", fontSize: 34, dy: 1.55 },
+};
+
 function noteToY(name, octave) {
-  const refIdx = NOTE_NAMES.indexOf("B") + 4*7;
+  const c = CLEFS[state.clef] || CLEFS.treble;
+  const refIdx = NOTE_NAMES.indexOf(c.ref) + c.refOct * 7;
   const noteIdx = NOTE_NAMES.indexOf(name[0]) + octave*7;
   return ST + 2*SLG - (noteIdx - refIdx) * (SLG/2);
 }
@@ -354,7 +364,8 @@ function renderStaff() {
     svg += `<line x1="${LM}" y1="${ST+i*SLG}" x2="${svgW-16}" y2="${ST+i*SLG}" stroke="#2a2a3a" stroke-width="1"/>`;
   }
   // Clef
-  svg += `<text x="${LM+4}" y="${ST+3.35*SLG}" font-size="42" fill="#444" font-family="serif">𝄞</text>`;
+  const clefInfo = CLEFS[state.clef] || CLEFS.treble;
+  svg += `<text x="${LM+4}" y="${ST+clefInfo.dy*SLG}" font-size="${clefInfo.fontSize}" fill="#444" font-family="serif">${clefInfo.symbol}</text>`;
 
   // Bars
   for (let i=0; i<totalBars; i++) {
@@ -697,6 +708,7 @@ function saveState() {
       cfNotes: state.cfNotes,
       cpNotes: state.cpNotes,
       mode: state.mode,
+      clef: state.clef,
       cpAbove: state.cpAbove,
       activeVoice: state.activeVoice,
       cursor: state.cursor,
@@ -716,6 +728,7 @@ function loadState() {
     state.cfNotes = data.cfNotes;
     state.cpNotes = data.cpNotes || new Array(data.cfNotes.length).fill(null);
     state.mode = data.mode && MODES[data.mode] ? data.mode : "C major";
+    state.clef = data.clef && CLEFS[data.clef] ? data.clef : "treble";
     state.cpAbove = data.cpAbove !== false;
     state.activeVoice = data.activeVoice === "cf" ? "cf" : "cp";
     state.cursor = typeof data.cursor === "number" ? Math.min(data.cursor, state.cfNotes.length - 1) : 0;
@@ -737,6 +750,7 @@ function clearSaved() {
 function exportJSON() {
   const data = {
     mode: state.mode,
+    clef: state.clef,
     cpAbove: state.cpAbove,
     cfNotes: state.cfNotes,
     cpNotes: state.cpNotes,
@@ -753,12 +767,14 @@ function importJSON(file) {
       state.cfNotes = data.cfNotes;
       state.cpNotes = data.cpNotes || new Array(data.cfNotes.length).fill(null);
       state.mode = data.mode && MODES[data.mode] ? data.mode : "C major";
+      state.clef = data.clef && CLEFS[data.clef] ? data.clef : "treble";
       state.cpAbove = data.cpAbove !== false;
       state.activeVoice = "cp";
       state.cursor = 0;
       // Sync select elements
       document.getElementById("cfSelect").value = "";
       document.getElementById("modeSelect").value = state.mode;
+      document.getElementById("clefSelect").value = state.clef;
       render();
     } catch (err) {
       alert("Could not parse file: " + err.message);
@@ -803,6 +819,8 @@ function exportText() {
 function exportMusicXML() {
   const mi = MODES[state.mode];
   const n = state.cfNotes.length;
+  const xmlClef = { treble: { sign: "G", line: 2 }, alto: { sign: "C", line: 3 }, bass: { sign: "F", line: 4 } };
+  const cl = xmlClef[state.clef] || xmlClef.treble;
 
   function noteToXML(note, voice) {
     if (!note) return `        <note><rest/><duration>4</duration><type>whole</type><voice>${voice}</voice></note>\n`;
@@ -846,7 +864,7 @@ function exportMusicXML() {
       xml += `        <divisions>4</divisions>\n`;
       xml += `        <key><fifths>${fifths}</fifths></key>\n`;
       xml += `        <time><beats>4</beats><beat-type>4</beat-type></time>\n`;
-      xml += `        <clef><sign>G</sign><line>2</line></clef>\n`;
+      xml += `        <clef><sign>${cl.sign}</sign><line>${cl.line}</line></clef>\n`;
       xml += `      </attributes>\n`;
     }
     xml += noteToXML(state.cpNotes[i], 1);
@@ -863,7 +881,7 @@ function exportMusicXML() {
       xml += `        <divisions>4</divisions>\n`;
       xml += `        <key><fifths>${fifths}</fifths></key>\n`;
       xml += `        <time><beats>4</beats><beat-type>4</beat-type></time>\n`;
-      xml += `        <clef><sign>G</sign><line>2</line></clef>\n`;
+      xml += `        <clef><sign>${cl.sign}</sign><line>${cl.line}</line></clef>\n`;
       xml += `      </attributes>\n`;
     }
     xml += noteToXML(state.cfNotes[i], 1);
@@ -959,6 +977,9 @@ function init() {
   });
   modeSel.addEventListener('change', () => { state.mode = modeSel.value; render(); });
 
+  const clefSel = document.getElementById('clefSelect');
+  clefSel.addEventListener('change', () => { state.clef = clefSel.value; render(); });
+
   // Import file input (hidden)
   const fileInput = document.getElementById('importFile');
   if (fileInput) {
@@ -984,6 +1005,7 @@ function init() {
   }
   // Sync select elements to current state
   modeSel.value = state.mode;
+  clefSel.value = state.clef;
   render();
 
   // Init audio on first interaction

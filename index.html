@@ -127,6 +127,14 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
       <select id="modeSelect"></select>
     </div>
     <div class="ctrl-group">
+      <label>Clef</label>
+      <select id="clefSelect">
+        <option value="treble">Treble</option>
+        <option value="alto">Alto</option>
+        <option value="bass">Bass</option>
+      </select>
+    </div>
+    <div class="ctrl-group">
       <label>CP Position</label>
       <div style="display:flex;gap:3px">
         <button class="btn act" id="btnAbove" onclick="setCpAbove(true)">Above</button>

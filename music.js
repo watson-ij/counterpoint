@@ -321,7 +321,7 @@ export function checkHarmony(cf, cp, mode, cpAbove) {
       const mot = motionType(cfM[n-2],cfM[n-1],cpM[n-2],cpM[n-1]);
       if (mot!=="contrary") issues.push({sev:"warning",bar:n-1,msg:"End by contrary motion (clausula vera)"});
     }
-    // Cadential interval check: penultimate should be M6→P8 or m3→P1
+    // Cadential interval check: m3/M3 → P1, m6/M6/10th → P8
     if (n >= 2 && cf[n-2] && cp[n-2]) {
       const penIntv = intervalInfo(cfM[n-2], cpM[n-2]);
       const finIntv = intervalInfo(cfM[n-1], cpM[n-1]);
@@ -329,8 +329,8 @@ export function checkHarmony(cf, cp, mode, cpAbove) {
       const finSimple = finIntv.simple;
       if (finSimple === 0 && finIntv.semitones === 0 && penSimple !== 3 && penSimple !== 4)
         issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m3/M3 before unison"});
-      if ((finIntv.semitones === 12 || finSimple === 7) && penSimple !== 8 && penSimple !== 9)
-        issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be m6/M6 before octave"});
+      if ((finIntv.semitones === 12 || finSimple === 7) && ![3, 4, 8, 9].includes(penSimple))
+        issues.push({sev:"warning",bar:n-2,msg:"Penultimate should be 6th or 10th before octave"});
     }
     // Leading tone check in minor modes
     const leadingTone = getRaised7th(mode);

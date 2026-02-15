@@ -426,6 +426,15 @@ function clearNote() {
   render();
 }
 
+function clearCF() {
+  if (state.cfNotes.every(n => n === null)) return;
+  pushUndo();
+  state.cfNotes = state.cfNotes.map(() => null);
+  state.activeVoice = "cf";
+  state.cursor = 0;
+  render();
+}
+
 function clearCP() {
   if (state.cpNotes.every(n => n === null)) return;
   pushUndo();
@@ -758,6 +767,242 @@ function downloadFile(name, content, type) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// RANDOM GENERATION (backtracking search)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function shuffleWithStepBias(candidates, prevMidi) {
+  // Fisher-Yates shuffle, then sort: stepwise moves first (random within groups)
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  if (prevMidi == null) return candidates;
+  candidates.sort((a, b) => {
+    const da = Math.abs(toMidi(a.name, a.octave) - prevMidi);
+    const db = Math.abs(toMidi(b.name, b.octave) - prevMidi);
+    const stepA = da <= 2 ? 0 : 1;
+    const stepB = db <= 2 ? 0 : 1;
+    return stepA - stepB;
+  });
+  return candidates;
+}
+
+function generateCF() {
+  const mi = MODES[state.mode];
+  const noteNames = mi.notes;
+  const octaves = [3, 4, 5];
+  const numBars = state.cfNotes.length;
+  if (numBars < 5) return;
+
+  // Build all candidate notes
+  const allCandidates = [];
+  for (const nm of noteNames) {
+    for (const oct of octaves) {
+      allCandidates.push({ name: nm, octave: oct });
+    }
+  }
+
+  // Pre-populate with existing notes; track which bars are fixed
+  const placed = state.cfNotes.map(n => n ? { name: n.name, octave: n.octave } : null);
+  const fixed = placed.map(n => n !== null);
+  const hasEmpty = fixed.some(f => !f);
+  if (!hasEmpty) return;  // nothing to fill
+
+  const MAX_ITER = 50000;
+  let iter = 0;
+
+  function solve(bar) {
+    if (++iter > MAX_ITER) return false;
+    if (bar === numBars) {
+      const issues = checkMelodicLine(placed, state.mode, "CF");
+      return issues.length === 0;
+    }
+
+    // Skip bars that already have notes
+    if (fixed[bar]) return solve(bar + 1);
+
+    let candidates = allCandidates.filter(c => {
+      const midi = toMidi(c.name, c.octave);
+      // First and last bar: must be tonic
+      if ((bar === 0 || bar === numBars - 1) && c.name !== mi.tonic) return false;
+      // No repeated adjacent notes
+      if (bar > 0 && placed[bar - 1]) {
+        const prev = placed[bar - 1];
+        const prevMidi = toMidi(prev.name, prev.octave);
+        if (midi === prevMidi) return false;
+        // Melodic interval checks
+        const semi = semiDist(prevMidi, midi);
+        const gi = genericInterval(prev.name, prev.octave, c.name, c.octave);
+        if (semi === 6) return false;  // tritone
+        if (semi >= 10 && semi <= 11) return false;  // 7th
+        if (semi === 3 && gi === 1) return false;  // aug 2nd
+        if (semi > 12) return false;  // > octave
+      }
+      // Range check with all placed notes so far
+      const midis = [];
+      for (let i = 0; i < bar; i++) if (placed[i]) midis.push(toMidi(placed[i].name, placed[i].octave));
+      midis.push(midi);
+      const range = Math.max(...midis) - Math.min(...midis);
+      if (range > 16) return false;  // > 10th
+      // Max 2 consecutive leaps in same direction
+      if (bar >= 2 && placed[bar - 1] && placed[bar - 2]) {
+        const m0 = toMidi(placed[bar - 2].name, placed[bar - 2].octave);
+        const m1 = toMidi(placed[bar - 1].name, placed[bar - 1].octave);
+        const gi01 = genericInterval(placed[bar - 2].name, placed[bar - 2].octave, placed[bar - 1].name, placed[bar - 1].octave);
+        const gi12 = genericInterval(placed[bar - 1].name, placed[bar - 1].octave, c.name, c.octave);
+        if (gi01 >= 2 && gi12 >= 2) {
+          const dir01 = Math.sign(m1 - m0);
+          const dir12 = Math.sign(midi - m1);
+          if (dir01 === dir12 && dir01 !== 0) return false;
+        }
+      }
+      return true;
+    });
+
+    const prevMidi = bar > 0 && placed[bar - 1] ? toMidi(placed[bar - 1].name, placed[bar - 1].octave) : null;
+    candidates = shuffleWithStepBias(candidates, prevMidi);
+
+    for (const c of candidates) {
+      placed[bar] = { name: c.name, octave: c.octave };
+      if (solve(bar + 1)) return true;
+    }
+    placed[bar] = null;
+    return false;
+  }
+
+  if (solve(0)) {
+    pushUndo();
+    state.cfNotes = placed;
+    // Only clear CP for bars where CF changed
+    for (let i = 0; i < numBars; i++) {
+      if (!fixed[i] && state.cpNotes[i]) state.cpNotes[i] = null;
+    }
+    state.activeVoice = "cp";
+    state.cursor = 0;
+    render();
+  }
+}
+
+function generateCP() {
+  const mi = MODES[state.mode];
+  const r7raw = getRaised7th(state.mode);
+  const noteNames = [...mi.notes];
+  if (r7raw && !noteNames.includes(r7raw)) noteNames.push(r7raw);
+  const octaves = state.cpAbove ? [4, 5] : [3, 4];
+  const numBars = state.cfNotes.length;
+  if (numBars < 2 || !state.cfNotes.every(Boolean)) return;
+
+  const cfMidis = state.cfNotes.map(n => toMidi(n.name, n.octave));
+
+  // Build all candidate notes
+  const allCandidates = [];
+  for (const nm of noteNames) {
+    for (const oct of octaves) {
+      allCandidates.push({ name: nm, octave: oct });
+    }
+  }
+
+  // Pre-populate with existing notes; track which bars are fixed
+  const placed = state.cpNotes.map(n => n ? { name: n.name, octave: n.octave } : null);
+  const fixed = placed.map(n => n !== null);
+  const hasEmpty = fixed.some(f => !f);
+  if (!hasEmpty) return;  // nothing to fill
+
+  const MAX_ITER = 500000;
+  let iter = 0;
+
+  function solve(bar) {
+    if (++iter > MAX_ITER) return false;
+    if (bar === numBars) {
+      // Full validation — require 0 errors and 0 warnings
+      const melIssues = checkMelodicLine(placed, state.mode, "CP");
+      const harmIssues = checkHarmony(state.cfNotes, placed, state.mode, state.cpAbove);
+      return melIssues.length === 0 && harmIssues.length === 0;
+    }
+
+    // Skip bars that already have notes
+    if (fixed[bar]) return solve(bar + 1);
+
+    const cfMidi = cfMidis[bar];
+    let candidates = allCandidates.filter(c => {
+      const midi = toMidi(c.name, c.octave);
+      const intv = intervalInfo(cfMidi, midi);
+
+      // Must be consonant
+      if (intv.isDissonant) return false;
+
+      // First bar: perfect consonance
+      if (bar === 0) {
+        if (state.cpAbove) {
+          if (![0, 7].includes(intv.simple) && intv.semitones !== 12) return false;
+        } else {
+          if (intv.simple !== 0 && intv.semitones !== 12) return false;
+        }
+      }
+
+      // Last bar: P1/P8, tonic name
+      if (bar === numBars - 1) {
+        if (intv.simple !== 0 && intv.semitones !== 12) return false;
+        if (c.name !== mi.tonic) return false;
+      }
+
+      // No unison mid-sequence
+      if (bar > 0 && bar < numBars - 1 && intv.semitones === 0) return false;
+
+      // Voice crossing
+      if (state.cpAbove && midi < cfMidi) return false;
+      if (!state.cpAbove && midi > cfMidi) return false;
+
+      // Within P12
+      if (intv.semitones > 19) return false;
+
+      // Melodic checks with previous bar
+      if (bar > 0 && placed[bar - 1]) {
+        const prev = placed[bar - 1];
+        const prevMidi = toMidi(prev.name, prev.octave);
+        if (midi === prevMidi) return false;  // no repeated notes
+        const semi = semiDist(prevMidi, midi);
+        const gi = genericInterval(prev.name, prev.octave, c.name, c.octave);
+        if (semi === 6) return false;  // tritone
+        if (semi >= 10 && semi <= 11) return false;  // 7th
+        if (semi === 3 && gi === 1) return false;  // aug 2nd
+        if (semi > 12) return false;  // > octave
+
+        // No parallel/direct 5ths/8ves
+        const prevCfMidi = cfMidis[bar - 1];
+        const prevIntv = intervalInfo(prevCfMidi, prevMidi);
+        const mot = motionType(prevCfMidi, cfMidi, prevMidi, midi);
+        if (intv.isPerfect && prevIntv.isPerfect && intv.simple === prevIntv.simple && mot === "parallel") return false;
+        if (mot === "similar" && intv.isPerfect && intv.semitones !== 0) {
+          const uMoved = state.cpAbove ? Math.abs(midi - prevMidi) : Math.abs(cfMidi - prevCfMidi);
+          if (uMoved > 2) return false;
+        }
+      }
+
+      return true;
+    });
+
+    const prevMidi = bar > 0 && placed[bar - 1] ? toMidi(placed[bar - 1].name, placed[bar - 1].octave) : null;
+    candidates = shuffleWithStepBias(candidates, prevMidi);
+
+    for (const c of candidates) {
+      placed[bar] = { name: c.name, octave: c.octave };
+      if (solve(bar + 1)) return true;
+    }
+    placed[bar] = null;
+    return false;
+  }
+
+  if (solve(0)) {
+    pushUndo();
+    state.cpNotes = placed;
+    state.activeVoice = "cp";
+    state.cursor = 0;
+    render();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -870,6 +1115,10 @@ function init() {
   document.getElementById('btnAddBar').addEventListener('click', () => addBar());
   document.getElementById('btnRemoveBar').addEventListener('click', () => removeBar());
 
+  // Random generation
+  document.getElementById('btnRandomCF').addEventListener('click', () => generateCF());
+  document.getElementById('btnRandomCP').addEventListener('click', () => generateCP());
+
   // Playback
   document.getElementById('btnPlayBoth').addEventListener('click', () => playAll());
   document.getElementById('btnPlayCF').addEventListener('click', () => playSingle('cf'));
@@ -890,6 +1139,7 @@ function init() {
 
   // Nav row
   document.getElementById('btnClear').addEventListener('click', () => clearNote());
+  document.getElementById('btnClearCF').addEventListener('click', () => clearCF());
   document.getElementById('btnClearCP').addEventListener('click', () => clearCP());
   document.getElementById('btnPrev').addEventListener('click', () => moveCursor(-1));
   document.getElementById('btnNext').addEventListener('click', () => moveCursor(1));

@@ -158,6 +158,10 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
       <button class="btn" id="btnAddBar" aria-label="Add bar">+ Bar</button>
       <button class="btn" id="btnRemoveBar" aria-label="Remove bar">− Bar</button>
     </div>
+    <div style="display:flex;gap:3px">
+      <button class="btn" id="btnRandomCF" title="Generate random cantus firmus">Random CF</button>
+      <button class="btn" id="btnRandomCP" title="Generate random counterpoint">Random CP</button>
+    </div>
     <div style="display:flex;gap:3px;margin-left:auto">
       <button class="btn play" id="btnPlayBoth">▶ Both</button>
       <button class="btn play" id="btnPlayCF">▶ CF</button>
@@ -198,6 +202,7 @@ details summary { font-size: 10px; color: #555; cursor: pointer; user-select: no
     <div id="noteKeyboard"></div>
     <div class="nav-row">
       <button class="btn" id="btnClear" aria-label="Clear current note">✕ Clear</button>
+      <button class="btn" id="btnClearCF" aria-label="Clear all cantus firmus notes">✕ Clear CF</button>
       <button class="btn" id="btnClearCP" aria-label="Clear all counterpoint notes">✕ Clear CP</button>
       <button class="btn" id="btnPrev">← Prev</button>
       <button class="btn" id="btnNext">Next →</button>

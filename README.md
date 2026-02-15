@@ -16,3 +16,14 @@ A browser-based tool for composing and checking first-species counterpoint again
 ## Usage
 
 No build step required. Open `index.html` in a browser, or visit the GitHub Pages link above.
+
+## References
+
+The rules implemented here are drawn from these sources:
+
+- Johann Joseph Fux, *Gradus ad Parnassum* (1725) — the foundational species counterpoint treatise
+- Felix Salzer & Carl Schachter, *Counterpoint in Composition* (Columbia University Press, 1969)
+- [Open Music Theory — First-Species Counterpoint](https://openmusictheory.github.io/firstSpecies.html)
+- [Open Music Theory (Pressbooks) — First-Species Counterpoint](https://viva.pressbooks.pub/openmusictheory/chapter/first-species-counterpoint/)
+- [University of Puget Sound — First Species Counterpoint](https://musictheory.pugetsound.edu/mt21c/FirstSpecies.html)
+- [RWU Composing Music — First Species Counterpoint](https://rwu.pressbooks.pub/musictheory/chapter/first-species-counterpoint/)

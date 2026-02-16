@@ -770,21 +770,76 @@ function downloadFile(name, content, type) {
 // RANDOM GENERATION (backtracking search)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function shuffleWithStepBias(candidates, prevMidi) {
-  // Fisher-Yates shuffle, then sort: stepwise moves first (random within groups)
-  for (let i = candidates.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-  }
-  if (prevMidi == null) return candidates;
-  candidates.sort((a, b) => {
-    const da = Math.abs(toMidi(a.name, a.octave) - prevMidi);
-    const db = Math.abs(toMidi(b.name, b.octave) - prevMidi);
-    const stepA = da <= 2 ? 0 : 1;
-    const stepB = db <= 2 ? 0 : 1;
-    return stepA - stepB;
+function scoreCandidates(candidates, placed, bar) {
+  // Score each candidate for melodic quality, then sort (lower = tried first).
+  // A random jitter keeps things varied across runs.
+  const scored = candidates.map(c => {
+    const midi = toMidi(c.name, c.octave);
+    let score = Math.random() * 3;  // base jitter
+
+    if (bar > 0 && placed[bar - 1]) {
+      const prevMidi = toMidi(placed[bar - 1].name, placed[bar - 1].octave);
+      const dist = Math.abs(midi - prevMidi);
+
+      // Prefer steps (2-4 semitones) over very small or large intervals
+      if (dist >= 1 && dist <= 4) score -= 2;       // steps: strong preference
+      else if (dist >= 5 && dist <= 7) score += 0;   // small leaps: neutral
+      else if (dist >= 8) score += 2;                 // large leaps: mild penalty
+
+      // After a leap, reward changing direction (leap recovery)
+      if (bar >= 2 && placed[bar - 2]) {
+        const ppMidi = toMidi(placed[bar - 2].name, placed[bar - 2].octave);
+        const prevDist = Math.abs(prevMidi - ppMidi);
+        const prevDir = Math.sign(prevMidi - ppMidi);
+        const curDir = Math.sign(midi - prevMidi);
+        if (prevDist >= 5 && curDir !== 0 && curDir !== prevDir) score -= 2;  // good: recover from leap
+        if (prevDist >= 5 && curDir === prevDir) score += 2;                   // bad: continue after leap
+      }
+
+      // Penalize running scales: 3+ steps in the same direction
+      if (bar >= 2 && placed[bar - 2]) {
+        const ppMidi = toMidi(placed[bar - 2].name, placed[bar - 2].octave);
+        const dir1 = Math.sign(prevMidi - ppMidi);
+        const dir2 = Math.sign(midi - prevMidi);
+        const dist1 = Math.abs(prevMidi - ppMidi);
+        if (dir1 === dir2 && dir1 !== 0 && dist1 <= 4 && dist <= 4) {
+          score += 2;  // 3 steps same direction
+          if (bar >= 3 && placed[bar - 3]) {
+            const pppMidi = toMidi(placed[bar - 3].name, placed[bar - 3].octave);
+            if (Math.sign(ppMidi - pppMidi) === dir1) score += 3;  // 4+ steps same dir
+          }
+        }
+      }
+
+      // Penalize oscillating patterns (A-B-A-B)
+      if (bar >= 2 && placed[bar - 2]) {
+        const ppMidi = toMidi(placed[bar - 2].name, placed[bar - 2].octave);
+        if (midi === ppMidi) score += 3;  // same note as 2 bars ago
+      }
+      if (bar >= 3 && placed[bar - 3] && placed[bar - 2]) {
+        const pppMidi = toMidi(placed[bar - 3].name, placed[bar - 3].octave);
+        const ppMidi = toMidi(placed[bar - 2].name, placed[bar - 2].octave);
+        if (midi === ppMidi && prevMidi === pppMidi) score += 5;  // exact A-B-A-B
+      }
+
+      // Penalize staying in a narrow band (< 3 semitones range over 4 notes)
+      if (bar >= 3 && placed[bar - 2] && placed[bar - 3]) {
+        const recent = [
+          toMidi(placed[bar - 3].name, placed[bar - 3].octave),
+          toMidi(placed[bar - 2].name, placed[bar - 2].octave),
+          prevMidi, midi
+        ];
+        const range = Math.max(...recent) - Math.min(...recent);
+        if (range <= 2) score += 4;
+        else if (range <= 4) score += 1;
+      }
+    }
+
+    return { candidate: c, score };
   });
-  return candidates;
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored.map(s => s.candidate);
 }
 
 function generateCF() {
@@ -859,8 +914,7 @@ function generateCF() {
       return true;
     });
 
-    const prevMidi = bar > 0 && placed[bar - 1] ? toMidi(placed[bar - 1].name, placed[bar - 1].octave) : null;
-    candidates = shuffleWithStepBias(candidates, prevMidi);
+    candidates = scoreCandidates(candidates, placed, bar);
 
     for (const c of candidates) {
       placed[bar] = { name: c.name, octave: c.octave };
@@ -982,8 +1036,7 @@ function generateCP() {
       return true;
     });
 
-    const prevMidi = bar > 0 && placed[bar - 1] ? toMidi(placed[bar - 1].name, placed[bar - 1].octave) : null;
-    candidates = shuffleWithStepBias(candidates, prevMidi);
+    candidates = scoreCandidates(candidates, placed, bar);
 
     for (const c of candidates) {
       placed[bar] = { name: c.name, octave: c.octave };

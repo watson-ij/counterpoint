@@ -770,9 +770,10 @@ function downloadFile(name, content, type) {
 // RANDOM GENERATION (backtracking search)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function scoreCandidates(candidates, placed, bar) {
+function scoreCandidates(candidates, placed, bar, cfMidis) {
   // Score each candidate for melodic quality, then sort (lower = tried first).
   // A random jitter keeps things varied across runs.
+  // cfMidis is optional — when provided, harmonic context is scored too.
   const scored = candidates.map(c => {
     const midi = toMidi(c.name, c.octave);
     let score = Math.random() * 3;  // base jitter
@@ -832,6 +833,21 @@ function scoreCandidates(candidates, placed, bar) {
         const range = Math.max(...recent) - Math.min(...recent);
         if (range <= 2) score += 4;
         else if (range <= 4) score += 1;
+      }
+    }
+
+    // Penalize consecutive perfect consonances (when CF context available)
+    if (cfMidis && cfMidis[bar] != null) {
+      const intv = intervalInfo(cfMidis[bar], midi);
+      if (intv.isPerfect) {
+        // Count how many consecutive perfect consonances precede this bar
+        let run = 0;
+        for (let i = bar - 1; i >= 0 && placed[i] && cfMidis[i] != null; i--) {
+          if (intervalInfo(cfMidis[i], toMidi(placed[i].name, placed[i].octave)).isPerfect) run++;
+          else break;
+        }
+        if (run >= 2) score += 4;       // would make 3+ in a row
+        else if (run >= 1) score += 2;   // would make 2 in a row — mild penalty
       }
     }
 
@@ -1036,7 +1052,7 @@ function generateCP() {
       return true;
     });
 
-    candidates = scoreCandidates(candidates, placed, bar);
+    candidates = scoreCandidates(candidates, placed, bar, cfMidis);
 
     for (const c of candidates) {
       placed[bar] = { name: c.name, octave: c.octave };

@@ -257,10 +257,10 @@ export function checkHarmony(cf, cp, mode, cpAbove) {
   const n = cf.length;
   const cfM = cf.map(x => x ? toMidi(x.name,x.octave) : null);
   const cpM = cp.map(x => x ? toMidi(x.name,x.octave) : null);
-  let cImp = 0;
+  let cImp = 0, cPerf = 0;
 
   for (let i = 0; i < n; i++) {
-    if (cfM[i]===null || cpM[i]===null) { cImp=0; continue; }
+    if (cfM[i]===null || cpM[i]===null) { cImp=0; cPerf=0; continue; }
     const intv = intervalInfo(cfM[i], cpM[i]);
 
     if (i===0) {
@@ -294,6 +294,9 @@ export function checkHarmony(cf, cp, mode, cpAbove) {
 
     if (intv.isImperfect) { cImp++; if (cImp>3) issues.push({sev:"warning",bar:i,msg:cImp+" consecutive 3rds/6ths"}); }
     else cImp=0;
+
+    if (intv.isPerfect) { cPerf++; if (cPerf>=3) issues.push({sev:"warning",bar:i,msg:cPerf+" consecutive perfect consonances"}); }
+    else cPerf=0;
 
     if (i>0 && cfM[i-1]!==null && cpM[i-1]!==null) {
       const prev = intervalInfo(cfM[i-1],cpM[i-1]);
